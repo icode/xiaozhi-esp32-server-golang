@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 
 	"github.com/gorilla/websocket"
 
@@ -20,6 +21,7 @@ type AsrWsClient struct {
 	connect   *websocket.Conn
 	appId     string
 	accessKey string
+	mu        sync.RWMutex // Protects connect from concurrent access
 }
 
 func NewAsrWsClient(url string, appKey, accessKey string) *AsrWsClient {
@@ -39,18 +41,28 @@ func (c *AsrWsClient) CreateConnection(ctx context.Context) error {
 	}
 	_ = resp
 	//log.Debugf("logid: %s", resp.Header.Get("X-Tt-Logid"))
+	c.mu.Lock()
 	c.connect = conn
+	c.mu.Unlock()
 	return nil
 }
 
 func (c *AsrWsClient) SendFullClientRequest() error {
+	c.mu.RLock()
+	conn := c.connect
+	c.mu.RUnlock()
+
+	if conn == nil {
+		return fmt.Errorf("websocket connection is nil")
+	}
+
 	fullClientRequest := request.NewFullClientRequest()
 	c.seq++
-	err := c.connect.WriteMessage(websocket.BinaryMessage, fullClientRequest)
+	err := conn.WriteMessage(websocket.BinaryMessage, fullClientRequest)
 	if err != nil {
 		return fmt.Errorf("full client message write websocket err: %w", err)
 	}
-	_, resp, err := c.connect.ReadMessage()
+	_, resp, err := conn.ReadMessage()
 	if err != nil {
 		return fmt.Errorf("full client message read err: %w", err)
 	}
@@ -64,9 +76,18 @@ func (c *AsrWsClient) SendMessages(ctx context.Context, audioStream <-chan []flo
 	messageChan := make(chan []byte)
 	go func() {
 		for message := range messageChan {
-			err := c.connect.WriteMessage(websocket.TextMessage, message)
+			c.mu.RLock()
+			conn := c.connect
+			c.mu.RUnlock()
+
+			if conn == nil {
+				log.Debugf("websocket connection is nil, stopping message writer")
+				return
+			}
+
+			err := conn.WriteMessage(websocket.TextMessage, message)
 			if err != nil {
-				//log.Printf("write message err: %s", err)
+				log.Debugf("write message err: %s", err)
 				return
 			}
 		}
@@ -94,14 +115,21 @@ func (c *AsrWsClient) SendMessages(ctx context.Context, audioStream <-chan []flo
 			c.seq++
 		}
 	}
-
-	return nil
 }
 
 func (c *AsrWsClient) recvMessages(ctx context.Context, resChan chan<- *response.AsrResponse, stopChan chan<- struct{}) {
 	defer close(resChan)
 	for {
-		_, message, err := c.connect.ReadMessage()
+		c.mu.RLock()
+		conn := c.connect
+		c.mu.RUnlock()
+
+		if conn == nil {
+			log.Debugf("websocket connection is nil, stopping message receiver")
+			return
+		}
+
+		_, message, err := conn.ReadMessage()
 		if err != nil {
 			return
 		}
@@ -152,6 +180,9 @@ func (c *AsrWsClient) Excute(ctx context.Context, audioStream chan []float32, re
 }
 
 func (c *AsrWsClient) Close() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	if c.connect != nil {
 		err := c.connect.Close()
 		c.connect = nil
