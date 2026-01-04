@@ -92,7 +92,8 @@ func (c *MqttUdpConn) RecvCmd(ctx context.Context, timeout int) ([]byte, error) 
 	case msg := <-c.recvCmdChan:
 		return msg, nil
 	case <-time.After(time.Duration(timeout) * time.Second):
-		return nil, errors.New("timeout")
+		log.Debugf("mqtt udp conn recv cmd timeout")
+		return nil, nil
 	}
 }
 
@@ -129,7 +130,8 @@ func (c *MqttUdpConn) RecvAudio(ctx context.Context, timeout int) ([]byte, error
 		}
 		return nil, errors.New("recvAudioChan is closed")
 	case <-time.After(time.Duration(timeout) * time.Second):
-		return nil, errors.New("timeout")
+		log.Debugf("mqtt udp conn recv audio timeout")
+		return nil, nil
 	}
 }
 
