@@ -878,7 +878,7 @@ func (s *ChatSession) OnListenStart() error {
 				var speakerResult *speaker.IdentifyResult
 				log.Debugf("s.speakerManager: %+v, IsActive: %+v", s.speakerManager, s.speakerManager.IsActive())
 				if s.speakerManager != nil {
-					timeout := time.NewTimer(500 * time.Millisecond)
+					timeout := time.NewTimer(200 * time.Millisecond)
 					defer timeout.Stop()
 					select {
 					case <-s.speakerResultReady:
