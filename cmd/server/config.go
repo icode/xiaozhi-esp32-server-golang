@@ -101,7 +101,7 @@ func startPeriodicConfigUpdate() {
 				if err := updateConfigFromAPI(); err != nil {
 					log.Warnf("周期性配置更新失败: %v", err)
 				} else {
-					log.Debug("周期性配置更新成功")
+					//log.Debug("周期性配置更新成功")
 				}
 			case <-configUpdateStop:
 				log.Info("周期性配置更新已停止")

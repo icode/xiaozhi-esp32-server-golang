@@ -40,7 +40,7 @@ func NewManagerUserConfigProvider(config map[string]interface{}) (*ConfigManager
 		client: managerClient,
 	}
 
-	log.Log().Info("配置管理器初始化成功", "backend_url", baseURL)
+	//log.Log().Debug("配置管理器初始化成功", "backend_url", baseURL)
 	return manager, nil
 }
 
@@ -195,7 +195,7 @@ func (c *ConfigManager) GetSystemConfig(ctx context.Context) (string, error) {
 			apiResponse.Data["voice_identify"] = voiceIdentifyMap
 		}
 	}
-	log.Debugf("从内控获取到系统配置: %+v", apiResponse.Data)
+	//log.Debugf("从内控获取到系统配置: %+v", apiResponse.Data)
 
 	// 将API响应转换为配置JSON字符串
 	configJSON, err := json.Marshal(apiResponse.Data)
