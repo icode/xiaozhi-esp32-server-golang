@@ -20,6 +20,10 @@ type AsrProvider interface {
 	// 当 audioStream 被关闭时，表示输入结束，最终结果将会通过返回的通道发送，然后关闭该通道
 	// 可以通过 ctx 控制识别过程的取消和超时
 	StreamingRecognize(ctx context.Context, audioStream <-chan []float32) (chan types.StreamingResult, error)
+	// Close 关闭资源，释放连接等
+	Close() error
+	// IsValid 检查资源是否有效
+	IsValid() bool
 }
 
 // NewAsrProvider 创建一个新的ASR实例

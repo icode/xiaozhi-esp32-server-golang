@@ -184,21 +184,22 @@ func (a *ASRManager) ProcessVadAudio(ctx context.Context, onClose func()) {
 					// 累积检测到声音的时长（同时更新一次过程中的时长）
 					state.Vad.AddVoiceDuration(int64(audioFormat.FrameDuration))
 
-					voiceDuration := state.Vad.GetVoiceDuration()
-					if state.IsRealTime() && viper.GetInt("chat.realtime_mode") == 1 && voiceDuration > 360 {
+					continuousVoiceDuration := state.Vad.GetVoiceContinuousDuration()
+					if state.IsRealTime() && viper.GetInt("chat.realtime_mode") == 1 && continuousVoiceDuration > 360 {
 						// 只有在未触发过的情况下才执行，确保只执行一次
 						if !hasTriggeredCancel {
 							//realtime模式下, 如果此时有正在进行的llm和tts则取消掉
-							log.Debugf("realtime模式vad打断下 && 语音时长超过%d ms 如果此时有正在进行的llm和tts则取消掉", voiceDuration)
+							log.Debugf("realtime模式vad打断下 && 语音时长超过%d ms 如果此时有正在进行的llm和tts则取消掉", continuousVoiceDuration)
 							state.AfterAsrSessionCtx.Cancel()
 							hasTriggeredCancel = true // 标记为已触发
 						}
 					}
 				} else {
+					state.Vad.ResetVoiceContinuousDuration()
+
 					// 没有声音时，如果之前也没有语音，则重置累积的声音时长
 					// 如果之前有语音但本次没有，保留时长值，让后续逻辑判断是否应该重置
 					if !clientHaveVoice {
-						state.Vad.ResetVoiceDuration()
 						//保留近10帧
 						/*
 							if state.AsrAudioBuffer.GetFrameCount() > vadNeedGetCount*3 {
@@ -239,7 +240,7 @@ func (a *ASRManager) ProcessVadAudio(ctx context.Context, onClose func()) {
 				if clientHaveVoice && lastHaveVoiceTime > 0 && !haveVoice {
 					// 判断有音频的语音时长，如果小于300ms则重置clientHaveVoice，避免短时间语音造成的误判
 					voiceDurationInSession := state.Vad.GetVoiceDurationInSession()
-					if voiceDurationInSession < 300 {
+					if voiceDurationInSession < 100 {
 						log.Debugf("语音时长过短 (%dms < 300ms)，重置clientHaveVoice", voiceDurationInSession)
 						state.SetClientHaveVoice(false)
 						state.Vad.ResetVoiceDuration()

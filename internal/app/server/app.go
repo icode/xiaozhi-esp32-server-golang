@@ -67,9 +67,12 @@ func (a *App) Run() {
 
 	a.initEventHandle()
 
-	// 启动资源池统计监控（每10秒输出一次）
+	// 启动资源池统计监控（每5分钟输出一次到日志）
 	ctx := context.Background()
-	pool.StartStatsMonitor(ctx, 10*time.Second)
+	pool.StartStatsMonitor(ctx, 5*time.Minute)
+
+	// 启动资源池统计上报（每5秒上报一次到 manager backend）
+	pool.StartStatsReporter(ctx)
 
 	select {} // 阻塞主线程
 }

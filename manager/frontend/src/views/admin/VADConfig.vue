@@ -282,21 +282,22 @@ const editConfig = (config) => {
   try {
     const configObj = JSON.parse(config.json_data || '{}')
     
-    // 兼容旧格式：带key的格式（{"webrtc_vad": {...}} 或 {"silero_vad": {...}}）
+    // 兼容旧格式：带key的格式（{"webrtc_vad": {...}} 或 {"silero_vad": {...}} 或 {"ten_vad": {...}}）
     if (configObj.webrtc_vad) {
       form.webrtc_vad = { ...form.webrtc_vad, ...configObj.webrtc_vad }
     } else if (configObj.silero_vad) {
       form.silero_vad = { ...form.silero_vad, ...configObj.silero_vad }
+    } else if (configObj.ten_vad) {
+      form.ten_vad = { ...form.ten_vad, ...configObj.ten_vad }
     } else {
       // 新格式：不带key，直接是配置对象
       if (config.provider === 'webrtc_vad') {
         form.webrtc_vad = { ...form.webrtc_vad, ...configObj }
       } else if (config.provider === 'silero_vad') {
         form.silero_vad = { ...form.silero_vad, ...configObj }
+      } else if (config.provider === 'ten_vad') {
+        form.ten_vad = { ...form.ten_vad, ...configObj }
       }
-    }
-    if (configObj.ten_vad) {
-      form.ten_vad = { ...form.ten_vad, ...configObj.ten_vad }
     }
   } catch (error) {
     console.error('解析配置JSON失败:', error)

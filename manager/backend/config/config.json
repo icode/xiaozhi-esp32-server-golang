@@ -15,7 +15,7 @@
     "expire_hour": 24
   },
   "speaker_service": {
-    "url": "http://192.168.208.214:8080"
+    "url": "http://127.0.0.1:9000"
   },
   "storage": {
     "speaker_audio_path": "storage/speakers",
@@ -27,3 +27,4 @@
     "max_file_size": 10485760
   }
 }
+

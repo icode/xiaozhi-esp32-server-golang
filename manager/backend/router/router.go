@@ -28,6 +28,7 @@ func Setup(db *gorm.DB, cfg *config.Config) *gin.Engine {
 	deviceActivationController := &controllers.DeviceActivationController{DB: db}
 	setupController := &controllers.SetupController{DB: db}
 	speakerGroupController := controllers.NewSpeakerGroupController(db, cfg)
+	poolStatsController := controllers.NewPoolStatsController()
 
 	// 初始化聊天历史控制器（需要配置）
 	cfg = config.Load()
@@ -67,6 +68,7 @@ func Setup(db *gorm.DB, cfg *config.Config) *gin.Engine {
 		api.POST("/internal/history/messages", chatHistoryController.SaveMessage)                         // 保存消息（内部服务接口）
 		api.PUT("/internal/history/messages/:message_id/audio", chatHistoryController.UpdateMessageAudio) // 更新消息音频（内部服务接口）
 		api.GET("/internal/history/messages", chatHistoryController.GetMessagesForInit)                   // 获取消息（用于初始化加载，内部服务接口）
+		api.POST("/internal/pool/stats", poolStatsController.ReportPoolStats)                             // 上报资源池统计数据（内部服务接口）
 
 		// 需要认证的路由
 		auth := api.Group("")
@@ -240,6 +242,10 @@ func Setup(db *gorm.DB, cfg *config.Config) *gin.Engine {
 				// 配置导入导出
 				admin.GET("/configs/export", adminController.ExportConfigs)
 				admin.POST("/configs/import", adminController.ImportConfigs)
+
+				// 资源池统计
+				admin.GET("/pool/stats", poolStatsController.GetPoolStats)
+				admin.GET("/pool/stats/summary", poolStatsController.GetPoolStatsSummary)
 			}
 		}
 	}

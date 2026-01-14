@@ -63,6 +63,9 @@ func (t *TTSManager) processTTSQueue(ctx context.Context) {
 			}
 			continue
 		}
+
+		log.Debugf("processTTSQueue start, text: %s", item.llmResponse.Text)
+
 		if item.onStartFunc != nil {
 			item.onStartFunc()
 		}
@@ -70,6 +73,8 @@ func (t *TTSManager) processTTSQueue(ctx context.Context) {
 		if item.onEndFunc != nil {
 			item.onEndFunc(err)
 		}
+		log.Debugf("processTTSQueue end, text: %s", item.llmResponse.Text)
+
 	}
 }
 
@@ -182,6 +187,7 @@ func (t *TTSManager) getTTSProviderInstance() (*pool.ResourceWrapper[tts.TTSProv
 // 同步 TTS 处理
 func (t *TTSManager) handleTts(ctx context.Context, llmResponse llm_common.LLMResponseStruct) error {
 	log.Debugf("handleTts start, text: %s", llmResponse.Text)
+	defer log.Debugf("handleTts end, text: %s", llmResponse.Text)
 	if llmResponse.Text == "" {
 		return nil
 	}
@@ -189,6 +195,7 @@ func (t *TTSManager) handleTts(ctx context.Context, llmResponse llm_common.LLMRe
 	// 获取TTS Provider实例
 	ttsWrapper, err := t.getTTSProviderInstance()
 	if err != nil {
+		log.Errorf("获取TTS Provider实例失败: %v", err)
 		return err
 	}
 	defer pool.Release(ttsWrapper)

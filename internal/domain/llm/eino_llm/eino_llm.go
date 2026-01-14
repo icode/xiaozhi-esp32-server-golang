@@ -393,3 +393,13 @@ func (p *EinoLLMProvider) WithStreamable(streamable bool) *EinoLLMProvider {
 	newProvider.streamable = streamable
 	return &newProvider
 }
+
+// Close 关闭资源（无状态 Provider，无需关闭）
+func (p *EinoLLMProvider) Close() error {
+	return nil
+}
+
+// IsValid 检查资源是否有效
+func (p *EinoLLMProvider) IsValid() bool {
+	return p != nil && p.chatModel != nil
+}

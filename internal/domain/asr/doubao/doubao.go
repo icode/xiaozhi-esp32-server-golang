@@ -139,3 +139,16 @@ func (d *DoubaoV2ASR) Reset() error {
 	log.Info("ASR状态已重置")
 	return nil
 }
+
+// Close 关闭资源，释放连接等
+func (d *DoubaoV2ASR) Close() error {
+	if d.c != nil {
+		return d.c.Close()
+	}
+	return nil
+}
+
+// IsValid 检查资源是否有效
+func (d *DoubaoV2ASR) IsValid() bool {
+	return d != nil
+}

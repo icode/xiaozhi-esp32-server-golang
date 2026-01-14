@@ -158,6 +158,13 @@ func (t *TenVAD) Close() error {
 	return nil
 }
 
+// IsValid 检查资源是否有效
+func (t *TenVAD) IsValid() bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.handle != nil
+}
+
 // createVADInstance 创建指定类型的VAD实例（内部实现）
 func createVADInstance(config map[string]interface{}) (VAD, error) {
 	return NewTenVAD(config)

@@ -235,6 +235,13 @@ func (s *SileroVAD) Close() error {
 	return nil
 }
 
+// IsValid 检查资源是否有效
+func (s *SileroVAD) IsValid() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.detector != nil
+}
+
 // createVADInstance 创建指定类型的VAD实例（内部实现）
 func createVADInstance(config map[string]interface{}) (VAD, error) {
 	return NewSileroVAD(config)

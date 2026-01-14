@@ -992,38 +992,37 @@ func (s *ChatSession) switchTTSForSpeaker(speakerResult *speaker.IdentifyResult)
 
 	// 4. 从系统配置（viper）中查找对应的TTS配置
 	var targetTTSConfig *types.TtsConfigItem
-	allTTSConfigsRaw := viper.Get("all_tts_configs")
-	if allTTSConfigsRaw == nil {
-		return fmt.Errorf("系统配置中未找到 all_tts_configs")
+	ttsConfigsRaw := viper.Get("tts")
+	if ttsConfigsRaw == nil {
+		return fmt.Errorf("系统配置中未找到 tts")
 	}
 
-	// 解析 all_tts_configs
-	if configsArray, ok := allTTSConfigsRaw.([]interface{}); ok {
-		for _, item := range configsArray {
-			if configMap, ok := item.(map[string]interface{}); ok {
-				configID, _ := configMap["config_id"].(string)
-				if configID == *speakerGroupInfo.TTSConfigID {
-					// 找到匹配的配置，解析完整信息
-					ttsItem := &types.TtsConfigItem{
-						ConfigID: configID,
-					}
-					if name, ok := configMap["name"].(string); ok {
-						ttsItem.Name = name
-					}
-					if provider, ok := configMap["provider"].(string); ok {
-						ttsItem.Provider = provider
-					}
-					if isDefault, ok := configMap["is_default"].(bool); ok {
-						ttsItem.IsDefault = isDefault
-					}
-					if config, ok := configMap["config"].(map[string]interface{}); ok {
-						ttsItem.Config = config
-					} else {
-						ttsItem.Config = make(map[string]interface{})
-					}
-					targetTTSConfig = ttsItem
-					break
+	// 解析 tts 配置（现在是一个 map，key 是 config_id）
+	if ttsConfigsMap, ok := ttsConfigsRaw.(map[string]interface{}); ok {
+		// 查找匹配的 config_id
+		if configItem, exists := ttsConfigsMap[*speakerGroupInfo.TTSConfigID]; exists {
+			if configMap, ok := configItem.(map[string]interface{}); ok {
+				// 解析配置项
+				ttsItem := &types.TtsConfigItem{
+					ConfigID: *speakerGroupInfo.TTSConfigID,
 				}
+				if name, ok := configMap["name"].(string); ok {
+					ttsItem.Name = name
+				}
+				if provider, ok := configMap["provider"].(string); ok {
+					ttsItem.Provider = provider
+				}
+				if isDefault, ok := configMap["is_default"].(bool); ok {
+					ttsItem.IsDefault = isDefault
+				}
+				// 配置项的其他字段直接作为 config
+				ttsItem.Config = make(map[string]interface{})
+				for k, v := range configMap {
+					if k != "name" && k != "provider" && k != "is_default" && k != "config_id" {
+						ttsItem.Config[k] = v
+					}
+				}
+				targetTTSConfig = ttsItem
 			}
 		}
 	}

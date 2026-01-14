@@ -44,6 +44,15 @@ func (v *Vad) ResetVoiceDuration() {
 	atomic.StoreInt64(&v.VoiceDurationInSession, 0)
 }
 
+// reset持续性语音时长
+func (v *Vad) ResetVoiceContinuousDuration() {
+	atomic.StoreInt64(&v.VoiceDuration, 0)
+}
+
+func (v *Vad) GetVoiceContinuousDuration() int64 {
+	return atomic.LoadInt64(&v.VoiceDurationInSession)
+}
+
 func (v *Vad) GetVoiceDurationInSession() int64 {
 	return atomic.LoadInt64(&v.VoiceDurationInSession)
 }

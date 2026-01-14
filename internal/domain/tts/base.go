@@ -25,6 +25,10 @@ type TTSProvider interface {
 	// SetVoice 动态设置音色参数
 	// voiceConfig: 包含音色相关配置的 map，如 {"voice": "xxx"} 或 {"spk_id": "xxx"}
 	SetVoice(voiceConfig map[string]interface{}) error
+	// Close 关闭资源，释放连接等
+	Close() error
+	// IsValid 检查资源是否有效（连接是否存活等）
+	IsValid() bool
 }
 
 // GetTTSProvider 获取一个完整的TTS提供者（支持Context）
@@ -177,4 +181,27 @@ func (a *ContextTTSAdapter) TextToSpeechStreamWithContext(ctx context.Context, t
 	}()
 
 	return outputChan, cancelFunc, nil
+}
+
+// Close 关闭资源
+func (a *ContextTTSAdapter) Close() error {
+	// 如果底层 Provider 实现了 Close 方法，直接调用
+	if closer, ok := a.Provider.(interface {
+		Close() error
+	}); ok {
+		return closer.Close()
+	}
+	return nil
+}
+
+// IsValid 检查资源是否有效
+func (a *ContextTTSAdapter) IsValid() bool {
+	// 如果底层 Provider 实现了 IsValid 方法，直接调用
+	if validator, ok := a.Provider.(interface {
+		IsValid() bool
+	}); ok {
+		return validator.IsValid()
+	}
+	// 否则检查 Provider 是否为 nil
+	return a.Provider != nil
 }

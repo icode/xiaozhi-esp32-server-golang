@@ -260,3 +260,13 @@ func (p *DoubaoTTSProvider) SetVoice(voiceConfig map[string]interface{}) error {
 	}
 	return fmt.Errorf("无效的音色配置: 缺少 voice")
 }
+
+// Close 关闭资源（无状态 Provider，无需关闭）
+func (p *DoubaoTTSProvider) Close() error {
+	return nil
+}
+
+// IsValid 检查资源是否有效
+func (p *DoubaoTTSProvider) IsValid() bool {
+	return p != nil
+}

@@ -135,43 +135,69 @@ func initConfig(configFile string) error {
 }
 
 // updateConfigFromAPI 从接口获取配置并更新viper配置
+// 内部会持续重试，直到成功后才返回
 func updateConfigFromAPI() error {
 	configProviderType := viper.GetString("config_provider.type")
+	retryInterval := 10 * time.Second // 重试间隔
+	retryCount := 0
 
-	//fmt.Printf("获取系统配置, config_provider.type: %s\n", configProviderType)
+	for {
+		// 从配置文件获取后端管理系统地址
+		configProvider, err := user_config.GetProvider(configProviderType)
+		if err != nil {
+			retryCount++
+			log.Warnf("获取配置提供者失败 (第%d次重试): %v，%v后重试", retryCount, err, retryInterval)
+			time.Sleep(retryInterval)
+			continue
+		}
 
-	// 从配置文件获取后端管理系统地址
-	configProvider, err := user_config.GetProvider(configProviderType)
-	if err != nil {
-		return fmt.Errorf("获取配置提供者失败: %v", err)
-	}
+		// 创建上下文
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 
-	// 创建上下文
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
+		// 获取系统配置JSON字符串
+		configJSON, err := configProvider.GetSystemConfig(ctx)
+		cancel()
 
-	// 获取系统配置JSON字符串
-	configJSON, err := configProvider.GetSystemConfig(ctx)
-	if err != nil {
-		return fmt.Errorf("获取系统配置失败: %v", err)
-	}
+		if err != nil {
+			retryCount++
+			log.Warnf("获取系统配置失败 (第%d次重试): %v，%v后重试", retryCount, err, retryInterval)
+			time.Sleep(retryInterval)
+			continue
+		}
 
-	if configJSON == "" {
+		if configJSON == "" {
+			// 配置为空，视为成功（可能服务返回空配置）
+			if retryCount > 0 {
+				log.Infof("配置获取成功（配置为空，经过%d次重试）", retryCount)
+			}
+			return nil
+		}
+
+		// 解析JSON为map
+		var configMap map[string]interface{}
+		if err := json.Unmarshal([]byte(configJSON), &configMap); err != nil {
+			retryCount++
+			log.Warnf("解析配置JSON失败 (第%d次重试): %v，%v后重试", retryCount, err, retryInterval)
+			time.Sleep(retryInterval)
+			continue
+		}
+
+		// 使用viper.MergeConfigMap设置到viper
+		if err := viper.MergeConfigMap(configMap); err != nil {
+			retryCount++
+			log.Warnf("合并配置到viper失败 (第%d次重试): %v，%v后重试", retryCount, err, retryInterval)
+			time.Sleep(retryInterval)
+			continue
+		}
+
+		// 成功
+		if retryCount > 0 {
+			log.Infof("配置获取成功（经过%d次重试）", retryCount)
+		} else {
+			log.Debug("配置获取成功")
+		}
 		return nil
 	}
-
-	// 解析JSON为map
-	var configMap map[string]interface{}
-	if err := json.Unmarshal([]byte(configJSON), &configMap); err != nil {
-		return fmt.Errorf("解析配置JSON失败: %v", err)
-	}
-
-	// 使用viper.MergeConfigMap设置到viper
-	if err := viper.MergeConfigMap(configMap); err != nil {
-		return fmt.Errorf("合并配置到viper失败: %v", err)
-	}
-
-	return nil
 }
 
 func initLog() error {

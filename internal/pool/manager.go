@@ -278,7 +278,7 @@ func GetStats() map[string]interface{} {
 	return stats
 }
 
-// StartStatsMonitor 启动资源池统计监控，每 interval 秒输出一次统计信息
+// StartStatsMonitor 启动资源池统计监控，每 interval 输出一次统计信息到日志
 func StartStatsMonitor(ctx context.Context, interval time.Duration) {
 	go func() {
 		ticker := time.NewTicker(interval)
@@ -297,14 +297,21 @@ func StartStatsMonitor(ctx context.Context, interval time.Duration) {
 						log.Errorf("序列化资源池统计信息失败: %v", err)
 						continue
 					}
-					log.Infof("资源池统计信息:\n%s", string(statsJSON))
+					log.Infof("========== 全局资源池统计信息 ==========")
+					log.Infof("统计时间: %s", time.Now().Format("2006-01-02 15:04:05"))
+					log.Infof("资源池数量: %d", len(stats))
+					log.Infof("详细信息:\n%s", string(statsJSON))
+					log.Infof("========================================")
 				} else {
-					log.Debugf("当前没有活跃的资源池")
+					log.Infof("========== 全局资源池统计信息 ==========")
+					log.Infof("统计时间: %s", time.Now().Format("2006-01-02 15:04:05"))
+					log.Infof("当前没有活跃的资源池")
+					log.Infof("========================================")
 				}
 			}
 		}
 	}()
-	log.Infof("资源池统计监控已启动，每 %v 输出一次统计信息", interval)
+	log.Infof("资源池统计监控已启动，每 %v 输出一次统计信息到日志", interval)
 }
 
 // Close 关闭所有资源池
@@ -376,12 +383,15 @@ func init() {
 		},
 		WithCloseFunc(func(p interface{}) error {
 			if vadProvider, ok := p.(vad_inter.VAD); ok && vadProvider != nil {
-				vadProvider.Reset()
+				return vadProvider.Close()
 			}
 			return nil
 		}),
 		WithIsValidFunc(func(p interface{}) bool {
-			return p != nil
+			if vadProvider, ok := p.(vad_inter.VAD); ok && vadProvider != nil {
+				return vadProvider.IsValid()
+			}
+			return false
 		}),
 		WithResetFunc(func(p interface{}) error {
 			if vadProvider, ok := p.(vad_inter.VAD); ok && vadProvider != nil {
@@ -398,7 +408,16 @@ func init() {
 			return asr.NewAsrProvider(p, cfg)
 		},
 		WithIsValidFunc(func(p interface{}) bool {
-			return p != nil
+			if asrProvider, ok := p.(asr.AsrProvider); ok && asrProvider != nil {
+				return asrProvider.IsValid()
+			}
+			return false
+		}),
+		WithCloseFunc(func(p interface{}) error {
+			if asrProvider, ok := p.(asr.AsrProvider); ok && asrProvider != nil {
+				return asrProvider.Close()
+			}
+			return nil
 		}),
 	)
 
@@ -413,7 +432,16 @@ func init() {
 			return llm.GetLLMProvider(llmType, cfg)
 		},
 		WithIsValidFunc(func(p interface{}) bool {
-			return p != nil
+			if llmProvider, ok := p.(llm.LLMProvider); ok && llmProvider != nil {
+				return llmProvider.IsValid()
+			}
+			return false
+		}),
+		WithCloseFunc(func(p interface{}) error {
+			if llmProvider, ok := p.(llm.LLMProvider); ok && llmProvider != nil {
+				return llmProvider.Close()
+			}
+			return nil
 		}),
 	)
 
@@ -424,7 +452,16 @@ func init() {
 			return tts.GetTTSProvider(p, cfg)
 		},
 		WithIsValidFunc(func(p interface{}) bool {
-			return p != nil
+			if ttsProvider, ok := p.(tts.TTSProvider); ok && ttsProvider != nil {
+				return ttsProvider.IsValid()
+			}
+			return false
+		}),
+		WithCloseFunc(func(p interface{}) error {
+			if ttsProvider, ok := p.(tts.TTSProvider); ok && ttsProvider != nil {
+				return ttsProvider.Close()
+			}
+			return nil
 		}),
 	)
 }

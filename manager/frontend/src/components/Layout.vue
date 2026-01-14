@@ -60,6 +60,12 @@
           <el-menu-item index="/admin/memory-config">Memory配置</el-menu-item>
         </el-sub-menu>
         
+        <!-- 系统监控 -->
+        <el-menu-item v-if="authStore.isAdmin" index="/admin/pool-stats">
+          <el-icon><DataAnalysis /></el-icon>
+          <span>资源池统计</span>
+        </el-menu-item>
+        
         <!-- 系统管理 -->
         <el-menu-item v-if="authStore.isAdmin" index="/admin/global-roles">
           <el-icon><Setting /></el-icon>
@@ -127,7 +133,8 @@ import {
   UserFilled,
   Iphone,
   Connection,
-  Microphone
+  Microphone,
+  DataAnalysis
 } from '@element-plus/icons-vue'
 
 const router = useRouter()

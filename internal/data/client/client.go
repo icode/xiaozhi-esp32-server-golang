@@ -400,6 +400,7 @@ func (state *ClientState) OnManualStop() {
 }
 
 func (state *ClientState) OnVoiceSilence() {
+	log.Debugf("OnVoiceSilence, voiceDuration: %d, voiceDurationInSession: %d", state.Vad.GetVoiceDuration(), state.Vad.GetVoiceDurationInSession())
 	state.SetClientVoiceStop(true) //设置停止说话标志位, 此时收到的音频数据不会进vad
 	//客户端停止说话
 	state.Asr.Stop() //停止asr并获取结果，进行llm

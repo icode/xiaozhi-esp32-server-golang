@@ -1008,6 +1008,11 @@ func (l *LLMManager) GetMessages(ctx context.Context, userMessage *schema.Messag
 
 	// 构建 system prompt
 	systemPrompt := l.clientState.SystemPrompt
+
+	// 添加当前时间和日期信息
+	now := time.Now()
+	systemPrompt += fmt.Sprintf("\n当前时间和日期: %s %s", now.Format("2006年01月02日 15:04:05"), now.Format("Monday"))
+
 	if l.clientState.MemoryContext != "" {
 		systemPrompt += fmt.Sprintf("\n用户个性化信息: \n%s", l.clientState.MemoryContext)
 	}
