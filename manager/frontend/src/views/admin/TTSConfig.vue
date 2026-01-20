@@ -74,7 +74,6 @@
             <el-option label="Edge TTS" value="edge" />
             <el-option label="Edge 离线" value="edge_offline" />
             <el-option label="OpenAI" value="openai" />
-            <el-option label="小智 TTS" value="xiaozhi" />
           </el-select>
         </el-form-item>
         
@@ -240,22 +239,6 @@
             <el-input-number v-model="form.openai.frame_duration" :min="1" :max="1000" style="width: 100%" placeholder="毫秒" />
           </el-form-item>
         </template>
-
-        <!-- 小智 TTS 配置 -->
-        <template v-if="form.provider === 'xiaozhi'">
-          <el-form-item label="服务器地址" prop="xiaozhi.server_addr">
-            <el-input v-model="form.xiaozhi.server_addr" placeholder="请输入服务器地址" />
-          </el-form-item>
-          <el-form-item label="设备ID" prop="xiaozhi.device_id">
-            <el-input v-model="form.xiaozhi.device_id" placeholder="请输入设备ID" />
-          </el-form-item>
-          <el-form-item label="客户端ID" prop="xiaozhi.client_id">
-            <el-input v-model="form.xiaozhi.client_id" placeholder="请输入客户端ID" />
-          </el-form-item>
-          <el-form-item label="令牌" prop="xiaozhi.token">
-            <el-input v-model="form.xiaozhi.token" placeholder="请输入令牌" type="password" show-password />
-          </el-form-item>
-        </template>
       </el-form>
       
       <template #footer>
@@ -284,7 +267,7 @@ const formRef = ref()
 const form = reactive({
   name: '',
   config_id: '',
-  provider: 'xiaozhi',
+  provider: 'cosyvoice',
   is_default: false,
   enabled: true,
   cosyvoice: {
@@ -335,12 +318,6 @@ const form = reactive({
     speed: 1.0,
     stream: true,
     frame_duration: 60
-  },
-  xiaozhi: {
-    server_addr: 'wss://api.tenclass.net/xiaozhi/v1/',
-    device_id: 'ba:8f:17:de:94:94',
-    client_id: 'e4b0c442-98fc-4e1b-8c3d-6a5b6a5b6a6d',
-    token: 'test-token'
   }
 })
 
@@ -397,12 +374,6 @@ const generateConfig = () => {
       config.stream = form.openai.stream
       config.frame_duration = form.openai.frame_duration
       break
-    case 'xiaozhi':
-      config.server_addr = form.xiaozhi.server_addr
-      config.device_id = form.xiaozhi.device_id
-      config.client_id = form.xiaozhi.client_id
-      config.token = form.xiaozhi.token
-      break
   }
   
   return JSON.stringify(config)
@@ -434,12 +405,7 @@ const rules = {
   // Edge 离线验证规则
   'edge_offline.server_url': [{ required: true, message: '请输入服务器URL', trigger: 'blur' }],
   // OpenAI TTS 验证规则
-  'openai.api_key': [{ required: true, message: '请输入API Key', trigger: 'blur' }],
-  // 小智 TTS 验证规则
-  'xiaozhi.server_addr': [{ required: true, message: '请输入服务器地址', trigger: 'blur' }],
-  'xiaozhi.device_id': [{ required: true, message: '请输入设备ID', trigger: 'blur' }],
-  'xiaozhi.client_id': [{ required: true, message: '请输入客户端ID', trigger: 'blur' }],
-  'xiaozhi.token': [{ required: true, message: '请输入令牌', trigger: 'blur' }]
+  'openai.api_key': [{ required: true, message: '请输入API Key', trigger: 'blur' }]
 }
 
 const loadConfigs = async () => {
@@ -515,12 +481,6 @@ const editConfig = (config) => {
         form.openai.speed = configData.speed || 1.0
         form.openai.stream = configData.stream !== undefined ? configData.stream : true
         form.openai.frame_duration = configData.frame_duration || 60
-        break
-      case 'xiaozhi':
-        form.xiaozhi.server_addr = configData.server_addr || ''
-        form.xiaozhi.device_id = configData.device_id || ''
-        form.xiaozhi.client_id = configData.client_id || ''
-        form.xiaozhi.token = configData.token || ''
         break
     }
   } catch (error) {
@@ -635,7 +595,7 @@ const resetForm = () => {
   Object.assign(form, {
     name: '',
     config_id: '',
-    provider: 'xiaozhi',
+    provider: 'cosyvoice',
     is_default: false,
     enabled: true,
     cosyvoice: {
@@ -686,12 +646,6 @@ const resetForm = () => {
       speed: 1.0,
       stream: true,
       frame_duration: 60
-    },
-    xiaozhi: {
-      server_addr: 'wss://api.tenclass.net/xiaozhi/v1/',
-      device_id: 'ba:8f:17:de:94:94',
-      client_id: 'e4b0c442-98fc-4e1b-8c3d-6a5b6a5b6a6d',
-      token: 'test-token'
     }
   })
 }
