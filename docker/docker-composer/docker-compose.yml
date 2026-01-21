@@ -33,7 +33,7 @@ services:
       - "2883:2883"        # mqtt server 12883
       - "8888:8888/udp"     # udp server 8888
     depends_on:
-      mysql
+      mysql:
         condition: service_healthy
       backend:
         condition: service_started
