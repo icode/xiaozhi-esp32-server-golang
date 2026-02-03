@@ -8,7 +8,7 @@ import (
 // Config MySQL配置
 type Config struct {
 	Host            string `json:"host"`
-	Port            string `json:"port"`
+	Port            int    `json:"port"`
 	Username        string `json:"username"`
 	Password        string `json:"password"`
 	Database        string `json:"database"`
@@ -18,13 +18,13 @@ type Config struct {
 }
 
 // NewConfigFromDatabase 从数据库配置创建MySQL配置
-func NewConfigFromDatabase(dbConfig config.DatabaseConfig) *Config {
+func NewConfigFromDatabase(cfg *config.MySQLConfig) *Config {
 	return &Config{
-		Host:            dbConfig.Host,
-		Port:            dbConfig.Port,
-		Username:        dbConfig.Username,
-		Password:        dbConfig.Password,
-		Database:        dbConfig.Database,
+		Host:            cfg.Host,
+		Port:            cfg.Port,
+		Username:        cfg.Username,
+		Password:        cfg.Password,
+		Database:        cfg.Database,
 		MaxIdleConns:    10,
 		MaxOpenConns:    100,
 		ConnMaxLifetime: 3600,
@@ -33,7 +33,7 @@ func NewConfigFromDatabase(dbConfig config.DatabaseConfig) *Config {
 
 // DSN 生成数据源名称
 func (c *Config) DSN() string {
-	return fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8mb4&parseTime=True&loc=Local",
+	return fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=True&loc=Local",
 		c.Username, c.Password, c.Host, c.Port, c.Database)
 }
 
@@ -42,7 +42,7 @@ func (c *Config) Validate() error {
 	if c.Host == "" {
 		return fmt.Errorf("MySQL host is required")
 	}
-	if c.Port == "" {
+	if c.Port == 0 {
 		return fmt.Errorf("MySQL port is required")
 	}
 	if c.Username == "" {
@@ -55,17 +55,20 @@ func (c *Config) Validate() error {
 }
 
 // ValidateConfig 验证MySQL配置
-func ValidateConfig(config config.DatabaseConfig) error {
-	if config.Host == "" {
+func ValidateConfig(cfg *config.MySQLConfig) error {
+	if cfg == nil {
+		return fmt.Errorf("MySQL config is required")
+	}
+	if cfg.Host == "" {
 		return fmt.Errorf("MySQL host is required")
 	}
-	if config.Port == "" {
+	if cfg.Port == 0 {
 		return fmt.Errorf("MySQL port is required")
 	}
-	if config.Username == "" {
+	if cfg.Username == "" {
 		return fmt.Errorf("MySQL username is required")
 	}
-	if config.Database == "" {
+	if cfg.Database == "" {
 		return fmt.Errorf("MySQL database name is required")
 	}
 	return nil

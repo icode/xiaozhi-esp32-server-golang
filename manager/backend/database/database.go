@@ -15,14 +15,24 @@ func Init(cfg config.DatabaseConfig) *gorm.DB {
 	var db *gorm.DB
 	var err error
 
-	if cfg.Database == "sqlite" {
+	storageType := cfg.GetStorageType()
+
+	if storageType == "sqlite" {
+		if cfg.SQLite == nil {
+			log.Println("SQLite配置为空，将使用fallback模式运行（硬编码用户验证）")
+			return nil
+		}
 		// SQLite 数据库连接
-		log.Println("使用SQLite数据库:", cfg.Host)
-		db, err = gorm.Open(sqlite.Open(cfg.Host), &gorm.Config{})
+		log.Println("使用SQLite数据库:", cfg.SQLite.FilePath)
+		db, err = gorm.Open(sqlite.Open(cfg.SQLite.FilePath), &gorm.Config{})
 	} else {
+		if cfg.MySQL == nil {
+			log.Println("MySQL配置为空，将使用fallback模式运行（硬编码用户验证）")
+			return nil
+		}
 		// MySQL 数据库连接
-		dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8mb4&parseTime=True&loc=Local",
-			cfg.Username, cfg.Password, cfg.Host, cfg.Port, cfg.Database)
+		dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=True&loc=Local",
+			cfg.MySQL.Username, cfg.MySQL.Password, cfg.MySQL.Host, cfg.MySQL.Port, cfg.MySQL.Database)
 		db, err = gorm.Open(mysql.Open(dsn), &gorm.Config{})
 	}
 

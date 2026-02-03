@@ -22,11 +22,38 @@ type ServerConfig struct {
 }
 
 type DatabaseConfig struct {
+	Type   string        `json:"type"`             // "mysql" 或 "sqlite"，决定使用哪种数据库
+	MySQL  *MySQLConfig  `json:"mysql,omitempty"`
+	SQLite *SQLiteConfig `json:"sqlite,omitempty"`
+}
+
+// GetStorageType 获取当前配置的存储类型
+func (c *DatabaseConfig) GetStorageType() string {
+	if c.Type == "sqlite" || c.Type == "mysql" {
+		return c.Type
+	}
+	// 未设置 type 时，根据已有配置推断
+	if c.SQLite != nil {
+		return "sqlite"
+	}
+	if c.MySQL != nil {
+		return "mysql"
+	}
+	return "mysql"
+}
+
+// MySQLConfig MySQL 数据库配置
+type MySQLConfig struct {
 	Host     string `json:"host"`
-	Port     string `json:"port"`
+	Port     int    `json:"port"`
 	Username string `json:"username"`
 	Password string `json:"password"`
 	Database string `json:"database"`
+}
+
+// SQLiteConfig SQLite 数据库配置
+type SQLiteConfig struct {
+	FilePath string `json:"file_path"` // 数据库文件路径，如 ./data/xiaozhi.db
 }
 
 type JWTConfig struct {
@@ -56,21 +83,28 @@ func Load() *Config {
 func LoadWithPath(configPath string) *Config {
 	config := LoadFromFile(configPath)
 
-	// 优先使用环境变量覆盖数据库配置
-	if host := os.Getenv("DB_HOST"); host != "" {
-		config.Database.Host = host
-	}
-	if port := os.Getenv("DB_PORT"); port != "" {
-		config.Database.Port = port
-	}
-	if username := os.Getenv("DB_USER"); username != "" {
-		config.Database.Username = username
-	}
-	if password := os.Getenv("DB_PASSWORD"); password != "" {
-		config.Database.Password = password
-	}
-	if database := os.Getenv("DB_NAME"); database != "" {
-		config.Database.Database = database
+	// 仅当使用 MySQL 时，确保有 MySQL 配置并应用环境变量覆盖
+	if config.Database.GetStorageType() == "mysql" {
+		if config.Database.MySQL == nil {
+			config.Database.MySQL = &MySQLConfig{}
+		}
+		if host := os.Getenv("DB_HOST"); host != "" {
+			config.Database.MySQL.Host = host
+		}
+		if port := os.Getenv("DB_PORT"); port != "" {
+			var p int
+			fmt.Sscanf(port, "%d", &p)
+			config.Database.MySQL.Port = p
+		}
+		if username := os.Getenv("DB_USER"); username != "" {
+			config.Database.MySQL.Username = username
+		}
+		if password := os.Getenv("DB_PASSWORD"); password != "" {
+			config.Database.MySQL.Password = password
+		}
+		if database := os.Getenv("DB_NAME"); database != "" {
+			config.Database.MySQL.Database = database
+		}
 	}
 
 	// 优先使用环境变量覆盖声纹服务配置

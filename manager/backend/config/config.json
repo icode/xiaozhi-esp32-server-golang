@@ -4,11 +4,17 @@
     "mode": "debug"
   },
   "database": {
-    "host": "192.168.208.214",
-    "port": "3306",
-    "username": "root",
-    "password": "mysql",
-    "database": "xiaozhi_admin_test"
+    "type": "sqlite",
+    "mysql": {
+      "host": "192.168.208.214",
+      "port": 3306,
+      "username": "root",
+      "password": "mysql",
+      "database": "xiaozhi_admin_test"
+    },
+    "sqlite": {
+      "file_path": "./data/xiaozhi.db"
+    }
   },
   "jwt": {
     "secret": "xiaozhi_admin_secret_key",
@@ -27,4 +33,3 @@
     "max_file_size": 10485760
   }
 }
-

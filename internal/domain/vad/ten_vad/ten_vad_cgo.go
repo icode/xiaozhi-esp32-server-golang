@@ -1,3 +1,5 @@
+//go:build cgo
+
 package ten_vad
 
 // #cgo windows,amd64 LDFLAGS: -L${SRCDIR}/../../../../lib/ten-vad/lib/Windows/x64 -lten_vad
