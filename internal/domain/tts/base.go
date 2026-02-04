@@ -3,6 +3,7 @@ package tts
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"xiaozhi-esp32-server-golang/constants"
 	"xiaozhi-esp32-server-golang/internal/domain/tts/cosyvoice"
@@ -35,17 +36,21 @@ type TTSProvider interface {
 }
 
 // GetTTSProvider 获取一个完整的TTS提供者（支持Context）
-// providerName: 从数据库configs表的provider字段获取的值（如"zhipu"）
+// providerName: 可能是 config_id/provider 或资源池 key（如 "edge_tts:zh-CN-XiaoxiaoNeural"）
 // config: 从数据库configs表的json_data字段解析的配置map
-// 优先使用 config 中的 provider 字段，如果没有则使用 providerName 参数
+// 优先使用 config 中的 provider 字段，否则从 providerName 解析（取 ":" 前部分）
 func GetTTSProvider(providerName string, config map[string]interface{}) (TTSProvider, error) {
-	// 优先使用 config 中的 provider，否则使用参数中的 provider
+	effectiveName := providerName
 	if configProvider, ok := config["provider"].(string); ok && configProvider != "" {
-		providerName = configProvider
+		effectiveName = configProvider
+	}
+	// 资源池 key 格式为 "provider:voiceID"，取前半部分作为提供者类型
+	if idx := strings.Index(effectiveName, ":"); idx > 0 {
+		effectiveName = effectiveName[:idx]
 	}
 	var baseProvider BaseTTSProvider
 
-	switch providerName {
+	switch effectiveName {
 	case constants.TtsTypeDoubao:
 		baseProvider = doubao.NewDoubaoTTSProvider(config)
 	case constants.TtsTypeDoubaoWS:
@@ -67,11 +72,11 @@ func GetTTSProvider(providerName string, config map[string]interface{}) (TTSProv
 	case constants.TtsTypeAliyunQwen:
 		baseProvider = qwen.NewQwenTTSProvider(config)
 	default:
-		return nil, fmt.Errorf("不支持的TTS提供者: %s", providerName)
+		return nil, fmt.Errorf("不支持的TTS提供者: %s", effectiveName)
 	}
 
 	if baseProvider == nil {
-		return nil, fmt.Errorf("无法创建TTS提供者: %s", providerName)
+		return nil, fmt.Errorf("无法创建TTS提供者: %s", effectiveName)
 	}
 
 	// 使用适配器包装基础提供者，转换为完整的TTSProvider

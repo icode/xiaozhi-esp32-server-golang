@@ -1,0 +1,231 @@
+# 基于 opus 环境的 Go 多平台编译 + Release
+# 含 frontend（embed_ui）、manager/backend、asr_server（子模块）；需 opus + ten_vad + sherpa-onnx 运行时
+name: Build Go binaries
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+on:
+  push:
+    branches: ["main"]
+    tags: ["v*"]
+  workflow_dispatch:
+
+env:
+  OPUS_VERSION: "1.3.1"
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows-amd64:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.24.4"
+
+      - name: Set up Node (frontend)
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: manager/frontend/package-lock.json
+
+      - name: Build frontend (embed_ui)
+        run: |
+          cd manager/frontend && npm ci && npm run build
+          mkdir -p ../backend/static/dist
+          cp -r dist/* ../backend/static/dist/
+
+      - name: Install cross-compilation tools & build libopus (static)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y mingw-w64 pkg-config build-essential wget upx-ucl
+          wget -q "https://archive.mozilla.org/pub/opus/opus-${OPUS_VERSION}.tar.gz"
+          tar xf "opus-${OPUS_VERSION}.tar.gz"
+          pushd "opus-${OPUS_VERSION}"
+          ./configure \
+            --host=x86_64-w64-mingw32 \
+            --disable-shared --enable-static \
+            --disable-doc --disable-extra-programs \
+            --prefix="$HOME/opus-win"
+          make -j"$(nproc)"
+          make install
+          popd
+
+      - name: Configure env for Windows build
+        run: |
+          echo "PKG_CONFIG_PATH=$HOME/opus-win/lib/pkgconfig" >> $GITHUB_ENV
+          echo "CGO_ENABLED=1" >> $GITHUB_ENV
+          echo "GOOS=windows" >> $GITHUB_ENV
+          echo "GOARCH=amd64" >> $GITHUB_ENV
+          echo "CC=x86_64-w64-mingw32-gcc" >> $GITHUB_ENV
+
+      - name: Build Windows binary
+        run: |
+          go mod tidy
+          # ten_vad 为动态库，不加 -static
+          go build -v -tags "nolibopusfile asr_server manager embed_ui" \
+            -ldflags "-s -w" \
+            -o xiaozhi_server.exe ./cmd/server
+
+      - name: Compress with UPX & keep single exe
+        run: |
+          upx --lzma xiaozhi_server.exe || true
+
+      - name: Set version for package name
+        id: version
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            echo "version=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+          else
+            echo "version=snapshot" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Pack Windows release (exe + build/common + build/windows)
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          PACK_DIR="xiaozhi_server_windows_amd64_${VERSION}"
+          mkdir -p "$PACK_DIR"/data "$PACK_DIR"/logs
+
+          cp xiaozhi_server.exe "$PACK_DIR/"
+          cp build/common/main_config.yaml build/common/manager.json build/common/asr_server.json "$PACK_DIR/"
+          cp -r build/common/models "$PACK_DIR/"
+          cp -r build/common/data/* "$PACK_DIR/data/"
+          cp build/windows/start.bat build/windows/README.md "$PACK_DIR/"
+          cp build/windows/onnxruntime.dll build/windows/sherpa-onnx-c-api.dll build/windows/sherpa-onnx-cxx-api.dll build/windows/ten_vad.dll "$PACK_DIR/"
+
+          zip -r "${PACK_DIR}.zip" "$PACK_DIR"
+          echo "PACK_ZIP=${PACK_DIR}.zip" >> $GITHUB_ENV
+
+      - name: Upload Windows package
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-amd64-binaries
+          path: ${{ env.PACK_ZIP }}
+
+  build-linux-amd64:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.24.4"
+
+      - name: Set up Node (frontend)
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: manager/frontend/package-lock.json
+
+      - name: Build frontend (embed_ui)
+        run: |
+          cd manager/frontend && npm ci && npm run build
+          mkdir -p ../backend/static/dist
+          cp -r dist/* ../backend/static/dist/
+
+      - name: Install deps & build libopus (static)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config build-essential wget libc++-dev libc++abi-dev upx-ucl zip patchelf
+          wget -q "https://archive.mozilla.org/pub/opus/opus-${OPUS_VERSION}.tar.gz"
+          tar xf "opus-${OPUS_VERSION}.tar.gz"
+          pushd "opus-${OPUS_VERSION}"
+          ./configure --enable-static --disable-shared --disable-doc --disable-extra-programs --prefix="$HOME/opus-linux"
+          make -j"$(nproc)"
+          make install
+          popd
+
+      - name: Configure env for Linux build
+        run: |
+          echo "PKG_CONFIG_PATH=$HOME/opus-linux/lib/pkgconfig" >> $GITHUB_ENV
+          echo "CGO_ENABLED=1" >> $GITHUB_ENV
+          echo "CGO_LDFLAGS=-lm" >> $GITHUB_ENV
+          echo "GOOS=linux" >> $GITHUB_ENV
+          echo "GOARCH=amd64" >> $GITHUB_ENV
+
+      - name: Build Linux binary
+        run: |
+          go mod tidy
+          # ten_vad 为 .so 动态库，不加 -static；rpath 已在 cgo 中指定；含 asr_server 与 Windows 一致
+          go build -v -tags "nolibopusfile asr_server manager embed_ui" \
+            -ldflags "-s -w" \
+            -o xiaozhi_server_linux_amd64 ./cmd/server
+
+      - name: Compress with UPX (optional)
+        run: |
+          cp xiaozhi_server_linux_amd64 xiaozhi_server_linux_amd64-upx
+          upx --lzma xiaozhi_server_linux_amd64-upx || true
+
+      - name: Pack Linux release (binary + build/common + build/linux .so)
+        run: |
+          mkdir -p release_linux_amd64/ten-vad/lib/Linux/x64
+          cp xiaozhi_server_linux_amd64 xiaozhi_server_linux_amd64-upx release_linux_amd64/
+          patchelf --add-rpath '$ORIGIN/ten-vad/lib/Linux/x64' release_linux_amd64/xiaozhi_server_linux_amd64 release_linux_amd64/xiaozhi_server_linux_amd64-upx 2>/dev/null || true
+          cp build/linux/libten_vad.so build/linux/libsherpa-onnx-c-api.so build/linux/libonnxruntime.so release_linux_amd64/ten-vad/lib/Linux/x64/
+          cp build/common/main_config.yaml build/common/manager.json build/common/asr_server.json release_linux_amd64/
+          cp -r build/common/models build/common/data release_linux_amd64/
+          mkdir -p release_linux_amd64/logs
+          chmod +x release_linux_amd64/xiaozhi_server_linux_amd64*
+          zip -r linux-amd64.zip release_linux_amd64/
+
+      - name: Upload Linux binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-amd64-binaries
+          path: |
+            release_linux_amd64/xiaozhi_server_linux_amd64
+            release_linux_amd64/xiaozhi_server_linux_amd64-upx
+            linux-amd64.zip
+
+  release:
+    needs:
+      - build-windows-amd64
+      - build-linux-amd64
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download Windows package
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-amd64-binaries
+          path: release
+
+      - name: Download Linux binaries
+        uses: actions/download-artifact@v4
+        with:
+          name: linux-amd64-binaries
+          path: release
+
+      - name: Prepare release assets
+        run: |
+          mv release/xiaozhi_server_windows_amd64_*.zip release/windows-amd64.zip
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          draft: false
+          prerelease: false
+          files: |
+            release/windows-amd64.zip
+            release/release_linux_amd64/xiaozhi_server_linux_amd64
+            release/release_linux_amd64/xiaozhi_server_linux_amd64-upx
+            release/linux-amd64.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

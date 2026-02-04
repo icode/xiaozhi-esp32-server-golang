@@ -3,6 +3,8 @@ package database
 import (
 	"fmt"
 	"log"
+	"os"
+	"path/filepath"
 	"xiaozhi/manager/backend/config"
 	"xiaozhi/manager/backend/models"
 
@@ -22,7 +24,12 @@ func Init(cfg config.DatabaseConfig) *gorm.DB {
 			log.Println("SQLite配置为空，将使用fallback模式运行（硬编码用户验证）")
 			return nil
 		}
-		// SQLite 数据库连接
+		// 确保数据库文件所在目录存在，避免 SQLite 报 unable to open database file
+		dir := filepath.Dir(cfg.SQLite.FilePath)
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			log.Printf("创建数据库目录失败 %s: %v", dir, err)
+			return nil
+		}
 		log.Println("使用SQLite数据库:", cfg.SQLite.FilePath)
 		db, err = gorm.Open(sqlite.Open(cfg.SQLite.FilePath), &gorm.Config{})
 	} else {

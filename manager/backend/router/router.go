@@ -1,9 +1,12 @@
 package router
 
 import (
+	"io/fs"
+	"net/http"
 	"xiaozhi/manager/backend/config"
 	"xiaozhi/manager/backend/controllers"
 	"xiaozhi/manager/backend/middleware"
+	"xiaozhi/manager/backend/static"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -30,8 +33,7 @@ func Setup(db *gorm.DB, cfg *config.Config) *gin.Engine {
 	speakerGroupController := controllers.NewSpeakerGroupController(db, cfg)
 	poolStatsController := controllers.NewPoolStatsController()
 
-	// 初始化聊天历史控制器（需要配置）
-	cfg = config.Load()
+	// 初始化聊天历史控制器（使用传入的 cfg，不重新 Load 避免内嵌时读错路径）
 	audioBasePath := "./storage/chat_history/audio"
 	maxFileSize := int64(10 * 1024 * 1024) // 默认10MB
 	if cfg.History.AudioBasePath != "" {
@@ -253,5 +255,39 @@ func Setup(db *gorm.DB, cfg *config.Config) *gin.Engine {
 	// WebSocket路由
 	r.GET("/ws", webSocketController.HandleWebSocket)
 
+	// 发版时嵌入的前端静态资源（-tags embed_ui）：NoRoute 时先尝试静态文件，再 SPA 回退
+	if sub, err := fs.Sub(static.FS, "dist"); err == nil {
+		r.NoRoute(serveEmbedStatic(sub))
+	}
+
 	return r
+}
+
+// serveEmbedStatic 未匹配路由时：先尝试从 fsys 返回对应静态文件，否则 GET 返回 index.html（SPA 回退）
+func serveEmbedStatic(fsys fs.FS) gin.HandlerFunc {
+	indexHTML, _ := fs.ReadFile(fsys, "index.html")
+	fileServer := http.FileServer(http.FS(fsys))
+	return func(c *gin.Context) {
+		if c.Request.Method != http.MethodGet && c.Request.Method != http.MethodHead {
+			c.Status(http.StatusNotFound)
+			return
+		}
+		path := c.Request.URL.Path
+		if path == "" || path[0] != '/' {
+			path = "/" + path
+		}
+		if path == "/" {
+			path = "/index.html"
+		}
+		name := path[1:]
+		if _, err := fs.Stat(fsys, name); err == nil {
+			fileServer.ServeHTTP(c.Writer, c.Request)
+			return
+		}
+		if len(indexHTML) > 0 {
+			c.Data(http.StatusOK, "text/html; charset=utf-8", indexHTML)
+			return
+		}
+		c.Status(http.StatusNotFound)
+	}
 }
