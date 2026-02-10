@@ -218,25 +218,25 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: xiaozhi_server-windows-amd64-${{ env.VERSION }}
-          path: release
+          path: release/xiaozhi_server-windows-amd64-${{ env.VERSION }}
 
       - name: Download Linux package
         uses: actions/download-artifact@v4
         with:
           name: xiaozhi_server-linux-amd64-${{ env.VERSION }}
-          path: release
+          path: release/xiaozhi_server-linux-amd64-${{ env.VERSION }}
 
       - name: Download macOS amd64 package
         uses: actions/download-artifact@v4
         with:
           name: xiaozhi_server-macos-amd64-${{ env.VERSION }}
-          path: release
+          path: release/xiaozhi_server-macos-amd64-${{ env.VERSION }}
 
       - name: Download macOS arm64 package
         uses: actions/download-artifact@v4
         with:
           name: xiaozhi_server-macos-arm64-${{ env.VERSION }}
-          path: release
+          path: release/xiaozhi_server-macos-arm64-${{ env.VERSION }}
 
       - name: Pack release zip
         run: |
