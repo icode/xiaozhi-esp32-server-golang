@@ -167,6 +167,7 @@ func (dac *DeviceActivationController) GetActivationInfo(c *gin.Context) {
 		"activated": false,
 		"code":      device.DeviceCode,
 		"challenge": device.Challenge,
+		"message":   "请在后台绑定激活设备，激活码:" + device.DeviceCode,
 	})
 }
 
