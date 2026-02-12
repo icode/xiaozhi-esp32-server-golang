@@ -619,12 +619,16 @@ func (s *ChatSession) HandleNotActivated() {
 
 	log.Infof("激活码: %d, 挑战码: %s, 消息: %s, 超时时间: %d", code, challenge, message, timeoutMs)
 
+	// 先发送STT文本给客户端
+	activationText := fmt.Sprintf("请在后台添加设备，激活码: %d", code)
+	_ = s.serverTransport.SendAsrResult(activationText)
+
 	s.ttsManager.EnqueueTtsStart(s.clientState.Ctx)
 	defer s.ttsManager.EnqueueTtsStop(s.clientState.Ctx)
 
 	sessionCtx := s.clientState.SessionCtx.Get(s.clientState.Ctx)
 	_ = s.ttsManager.handleTextResponse(s.clientState.AfterAsrSessionCtx.Get(sessionCtx), llm_common.LLMResponseStruct{
-		Text: fmt.Sprintf("请在后台添加设备，激活码: %d", code),
+		Text: activationText,
 	}, false)
 
 }
