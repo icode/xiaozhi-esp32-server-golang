@@ -387,9 +387,12 @@ func (dc *DeviceMcpSession) GetToolByName(toolName string) (tool tool.InvokableT
 		mcpInstance.toolsMux.RUnlock()
 		return true
 	})
+	if ok {
+		return tool, true
+	}
 	if dc.iotOverMcp != nil {
 		dc.iotOverMcp.toolsMux.RLock()
-		if tool, ok := dc.iotOverMcp.tools[toolName]; ok {
+		if tool, ok = dc.iotOverMcp.tools[toolName]; ok {
 			dc.iotOverMcp.toolsMux.RUnlock()
 			return tool, true
 		}

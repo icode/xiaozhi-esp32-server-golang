@@ -7,7 +7,7 @@ import (
 	mcp_go "github.com/mark3labs/mcp-go/mcp"
 )
 
-func GetToolByName(deviceId string, toolName string) (tool.InvokableTool, bool) {
+func GetToolByName(deviceId string, agentId string, toolName string) (tool.InvokableTool, bool) {
 	// 优先从本地管理器获取
 	localManager := GetLocalMCPManager()
 	tool, ok := localManager.GetToolByName(toolName)
@@ -24,9 +24,16 @@ func GetToolByName(deviceId string, toolName string) (tool.InvokableTool, bool) 
 	// 最后从设备MCP客户端池获取
 	tool, ok = mcpClientPool.GetToolByDeviceId(deviceId, toolName)
 	if !ok {
-		return nil, false
+		return tool, true
 	}
-	return tool, true
+	// 兼容 AgentID 上报的 MCP 工具
+	if agentId != "" && agentId != deviceId {
+		tool, ok = mcpClientPool.GetToolByDeviceId(agentId, toolName)
+		if ok {
+			return tool, true
+		}
+	}
+	return nil, false
 }
 
 func GetDeviceMcpClient(deviceId string) *DeviceMcpSession {
