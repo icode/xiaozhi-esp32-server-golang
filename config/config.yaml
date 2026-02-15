@@ -123,7 +123,7 @@ vad:
 
 # 自动语音识别（ASR）配置
 asr:
-  provider: "funasr"  # ASR提供商：funasr 或 doubao
+  provider: "funasr"  # ASR provider: funasr / aliyun_funasr / doubao
   # FunASR配置
   funasr:
     host: "127.0.0.1"          # FunASR服务器地址
@@ -135,7 +135,18 @@ asr:
     max_connections: 5         # 最大连接数
     timeout: 30                # 超时时间（秒）
     auto_end: true             # 是否自动结束
-  # 豆包ASR配置
+  # Aliyun FunASR config
+  aliyun_funasr:
+    api_key: ""
+    ws_url: "wss://dashscope.aliyuncs.com/api-ws/v1/inference/"
+    model: "fun-asr-realtime"
+    format: "pcm"        # only pcm
+    sample_rate: 16000     # only 16000
+    vocabulary_id: ""
+    disfluency_removal_enabled: false
+    timeout: 30
+
+  # Doubao ASR config
   doubao:
     appid: "xxx"                    # 应用ID
     access_token: "xxx-Cu"          # 访问令牌
