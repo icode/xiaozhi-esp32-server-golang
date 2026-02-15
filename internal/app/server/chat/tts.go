@@ -3,6 +3,7 @@ package chat
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -287,7 +288,7 @@ func (t *TTSManager) ClearTTSQueue() {
 
 // handleTts 单条 TTS：生成并向 sessionAudioQueue 推送 SentenceStart → Frame… → SentenceEnd
 func (t *TTSManager) handleTts(ctx context.Context, generation uint64, llmResponse llm_common.LLMResponseStruct, onStartFunc func(), onEndFunc func(error)) {
-	if llmResponse.Text == "" {
+	if strings.TrimSpace(llmResponse.Text) == "" {
 		if onEndFunc != nil {
 			onEndFunc(nil)
 		}
@@ -365,7 +366,7 @@ func (t *TTSManager) handleTts(ctx context.Context, generation uint64, llmRespon
 
 // 处理文本内容响应（异步 TTS 入队）
 func (t *TTSManager) handleTextResponse(ctx context.Context, llmResponse llm_common.LLMResponseStruct, isSync bool) error {
-	if llmResponse.Text == "" {
+	if strings.TrimSpace(llmResponse.Text) == "" {
 		return nil
 	}
 
@@ -466,7 +467,7 @@ func extractVoiceID(config map[string]interface{}) string {
 
 // generateTtsOnly 方案 C：仅做 TTS 生成，不发送；返回音频 channel 与发送完成后需调用的 ReleaseFunc
 func (t *TTSManager) generateTtsOnly(ctx context.Context, llmResponse llm_common.LLMResponseStruct) (outputChan <-chan []byte, releaseFunc func(), err error) {
-	if llmResponse.Text == "" {
+	if strings.TrimSpace(llmResponse.Text) == "" {
 		return nil, nil, nil
 	}
 	ttsWrapper, err := t.getTTSProviderInstance()

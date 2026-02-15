@@ -361,7 +361,7 @@ func (l *LLMManager) handleLLMResponse(ctx context.Context, userMessage *schema.
 					toolCalls = append(toolCalls, llmResponse.ToolCalls...)
 				}
 
-				if llmResponse.Text != "" {
+				if strings.TrimSpace(llmResponse.Text) != "" {
 					// 处理文本内容响应
 					if err := l.ttsManager.handleTextResponse(ctx, llmResponse, true); err != nil {
 						return true, err
@@ -394,7 +394,7 @@ func (l *LLMManager) handleLLMResponse(ctx context.Context, userMessage *schema.
 							}
 						}
 						strFullText := fullText.String()
-						if strFullText != "" || len(toolCalls) > 0 {
+						if strings.TrimSpace(strFullText) != "" || len(toolCalls) > 0 {
 							if err := l.AddLlmMessage(ctx, schema.AssistantMessage(strFullText, toolCalls)); err != nil {
 								log.Errorf("保存助手消息失败: %v", err)
 							}
@@ -409,7 +409,7 @@ func (l *LLMManager) handleLLMResponse(ctx context.Context, userMessage *schema.
 							log.Errorf("处理工具调用响应失败: %v", err)
 							return true, fmt.Errorf("处理工具调用响应失败: %v", err)
 						}
-						if !invokeToolSuccess {
+						if !invokeToolSuccess && strings.TrimSpace(llmResponse.Text) != "" {
 							//工具调用失败
 							if err := l.ttsManager.handleTextResponse(ctx, llmResponse, false); err != nil {
 								return true, err
