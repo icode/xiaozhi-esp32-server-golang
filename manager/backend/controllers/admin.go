@@ -2680,7 +2680,7 @@ func (ac *AdminController) GetChatSettings(c *gin.Context) {
 		},
 		"chat": gin.H{
 			"max_idle_duration":         30000,
-			"chat_max_silence_duration": 200,
+			"chat_max_silence_duration": 400,
 			"realtime_mode":             4,
 		},
 	}
@@ -2699,7 +2699,7 @@ func (ac *AdminController) GetChatSettings(c *gin.Context) {
 	if err := ac.DB.Where("type = ?", "chat").Order("is_default DESC, id ASC").First(&chatConfig).Error; err == nil {
 		var chatData map[string]interface{}
 		if chatConfig.JsonData != "" && json.Unmarshal([]byte(chatConfig.JsonData), &chatData) == nil {
-			if maxIdle, ok := chatData["max_idle_duration"].(float64); ok && int64(maxIdle) > 0 {
+			if maxIdle, ok := chatData["max_idle_duration"].(float64); ok && int64(maxIdle) >= 0 {
 				response["chat"].(gin.H)["max_idle_duration"] = int64(maxIdle)
 			}
 			if maxSilence, ok := chatData["chat_max_silence_duration"].(float64); ok && int64(maxSilence) >= 0 {
@@ -2732,8 +2732,8 @@ func (ac *AdminController) UpdateChatSettings(c *gin.Context) {
 		return
 	}
 
-	if req.Chat.MaxIdleDuration <= 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "chat.max_idle_duration 必须大于 0"})
+	if req.Chat.MaxIdleDuration < 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "chat.max_idle_duration 不能小于 0，0 表示不限制"})
 		return
 	}
 	if req.Chat.ChatMaxSilenceDuration < 0 {

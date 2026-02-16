@@ -86,8 +86,8 @@ func GenClientState(pctx context.Context, deviceID string) (*ClientState, error)
 	ctx, cancel := context.WithCancel(pctx)
 
 	maxSilenceDuration := viper.GetInt64("chat.chat_max_silence_duration")
-	if maxSilenceDuration == 0 {
-		maxSilenceDuration = 200
+	if !viper.IsSet("chat.chat_max_silence_duration") {
+		maxSilenceDuration = 400
 	}
 
 	isDeviceActivated, err := configProvider.IsDeviceActivated(ctx, deviceID, "")

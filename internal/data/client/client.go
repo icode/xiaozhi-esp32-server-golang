@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"strings"
 	"time"
 
@@ -283,9 +284,13 @@ func (c *ClientState) GetTtsStart() bool {
 }
 
 func (c *ClientState) GetMaxIdleDuration() int64 {
+	if !viper.IsSet("chat.max_idle_duration") {
+		return 30000
+	}
+
 	maxIdleDuration := viper.GetInt64("chat.max_idle_duration")
-	if maxIdleDuration == 0 {
-		maxIdleDuration = 20000
+	if maxIdleDuration <= 0 {
+		return math.MaxInt64
 	}
 	return maxIdleDuration
 }

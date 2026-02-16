@@ -18,11 +18,17 @@
         </el-form-item>
 
         <el-divider content-position="left">聊天参数</el-divider>
-        <el-form-item label="最大空闲时间(ms)" prop="chat.max_idle_duration">
-          <el-input-number v-model="form.chat.max_idle_duration" :min="1" :step="1000" style="width: 100%;" />
+        <el-form-item label="会话最大空闲时间(ms)" prop="chat.max_idle_duration">
+          <el-input-number v-model="form.chat.max_idle_duration" :min="0" :step="1000" style="width: 100%;" />
+          <div class="form-help">
+            单位毫秒。设置为 0 表示不限制会话空闲时长（不会因空闲自动断开）。建议值：30000~120000。
+          </div>
         </el-form-item>
-        <el-form-item label="静音阈值(ms)" prop="chat.chat_max_silence_duration">
+        <el-form-item label="句子结束静音阈值(ms)" prop="chat.chat_max_silence_duration">
           <el-input-number v-model="form.chat.chat_max_silence_duration" :min="0" :step="10" style="width: 100%;" />
+          <div class="form-help">
+            用于判定一句话结束：从“有声”转为“静音”持续达到该阈值后，认为句子结束并触发后续处理。默认 400ms。阈值越小响应越快但更易截断，阈值越大更稳但响应更慢，建议 300~600ms。
+          </div>
         </el-form-item>
         <el-form-item label="实时打断模式" prop="chat.realtime_mode">
           <el-select v-model="form.chat.realtime_mode" style="width: 100%;">
@@ -52,17 +58,17 @@ const form = reactive({
   },
   chat: {
     max_idle_duration: 30000,
-    chat_max_silence_duration: 200,
+    chat_max_silence_duration: 400,
     realtime_mode: 4
   }
 })
 
 const rules = {
   'chat.max_idle_duration': [
-    { required: true, message: '请输入最大空闲时间', trigger: 'blur' }
+    { required: true, message: '请输入会话最大空闲时间', trigger: 'blur' }
   ],
   'chat.chat_max_silence_duration': [
-    { required: true, message: '请输入静音阈值', trigger: 'blur' }
+    { required: true, message: '请输入句子结束静音阈值', trigger: 'blur' }
   ],
   'chat.realtime_mode': [
     { required: true, message: '请选择实时打断模式', trigger: 'change' }
@@ -76,7 +82,7 @@ const loadSettings = async () => {
     const data = res.data?.data || {}
     form.auth.enable = !!data.auth?.enable
     form.chat.max_idle_duration = Number(data.chat?.max_idle_duration ?? 30000)
-    form.chat.chat_max_silence_duration = Number(data.chat?.chat_max_silence_duration ?? 200)
+    form.chat.chat_max_silence_duration = Number(data.chat?.chat_max_silence_duration ?? 400)
     form.chat.realtime_mode = Number(data.chat?.realtime_mode ?? 4)
   } catch (error) {
     ElMessage.error('加载聊天设置失败')
@@ -137,5 +143,12 @@ onMounted(() => {
 .header-right {
   display: flex;
   gap: 8px;
+}
+
+.form-help {
+  margin-top: 6px;
+  color: #909399;
+  font-size: 12px;
+  line-height: 1.5;
 }
 </style>
