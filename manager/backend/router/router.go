@@ -208,6 +208,10 @@ func Setup(db *gorm.DB, cfg *config.Config) *gin.Engine {
 				admin.GET("/vision-base-config", adminController.GetVisionBaseConfig)
 				admin.PUT("/vision-base-config", adminController.UpdateVisionBaseConfig)
 
+				// 聊天设置（auth/chat）
+				admin.GET("/chat-settings", adminController.GetChatSettings)
+				admin.PUT("/chat-settings", adminController.UpdateChatSettings)
+
 				admin.GET("/ota-configs", adminController.GetOTAConfigs)
 				admin.POST("/ota-configs", adminController.CreateOTAConfig)
 				admin.PUT("/ota-configs/:id", adminController.UpdateOTAConfig)

@@ -1085,10 +1085,16 @@ func (l *LLMManager) AddLlmMessage(ctx context.Context, msg *schema.Message) err
 }
 
 func (l *LLMManager) GetMessages(ctx context.Context, userMessage *schema.Message, count int, speakerResult *speaker.IdentifyResult) []*schema.Message {
-	//从dialogue中获取
-	messageList := l.clientState.GetMessages(count)
-	if userMessage != nil {
-		messageList = trimTrailingUserMessages(messageList)
+	memoryMode := l.clientState.GetMemoryMode()
+	includeHistory := memoryMode != MemoryModeNone
+
+	// 从 dialogue 中获取上下文（none 模式下不加载历史）
+	messageList := make([]*schema.Message, 0)
+	if includeHistory {
+		messageList = l.clientState.GetMessages(count)
+		if userMessage != nil {
+			messageList = trimTrailingUserMessages(messageList)
+		}
 	}
 
 	// 构建 system prompt
@@ -1098,7 +1104,7 @@ func (l *LLMManager) GetMessages(ctx context.Context, userMessage *schema.Messag
 	now := time.Now()
 	systemPrompt += fmt.Sprintf("\n当前时间和日期: %s %s", now.Format("2006年01月02日 15:04:05"), now.Format("Monday"))
 
-	if l.clientState.MemoryContext != "" {
+	if memoryMode == MemoryModeLong && l.clientState.MemoryContext != "" {
 		systemPrompt += fmt.Sprintf("\n用户个性化信息: \n%s", l.clientState.MemoryContext)
 	}
 
@@ -1119,7 +1125,7 @@ func (l *LLMManager) GetMessages(ctx context.Context, userMessage *schema.Messag
 	}
 
 	//search memory
-	if l.clientState.MemoryProvider != nil && userMessage != nil {
+	if memoryMode == MemoryModeLong && l.clientState.MemoryProvider != nil && userMessage != nil {
 		memoryContext, err := l.clientState.MemoryProvider.Search(ctx, l.clientState.GetDeviceIDOrAgentID(), userMessage.Content, 10, 180)
 		if err != nil {
 			log.Errorf("搜索记忆失败: %v", err)

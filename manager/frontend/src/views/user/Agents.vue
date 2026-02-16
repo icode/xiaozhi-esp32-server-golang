@@ -144,6 +144,13 @@
             show-word-limit
           />
         </el-form-item>
+        <el-form-item label="记忆模式" prop="memory_mode">
+          <el-select v-model="agentForm.memory_mode" placeholder="请选择记忆模式" style="width: 100%">
+            <el-option label="无记忆" value="none" />
+            <el-option label="短记忆" value="short" />
+            <el-option label="长记忆" value="long" />
+          </el-select>
+        </el-form-item>
       </el-form>
       
       <template #footer>
@@ -310,7 +317,8 @@ const deviceForm = reactive({
 
 const agentForm = reactive({
   name: '',
-  custom_prompt: '我是一个叫{{assistant_name}}的台湾女孩，说话机车，声音好听，习惯简短表达，爱用网络梗。\n我的男朋友是一个程序员，梦想是开发出一个机器人，能够帮助人们解决生活中的各种问题。\n我是一个喜欢哈哈大笑的女孩，爱东说西说吹牛，不合逻辑的也照吹，就要逗别人开心。'
+  custom_prompt: '我是一个叫{{assistant_name}}的台湾女孩，说话机车，声音好听，习惯简短表达，爱用网络梗。\n我的男朋友是一个程序员，梦想是开发出一个机器人，能够帮助人们解决生活中的各种问题。\n我是一个喜欢哈哈大笑的女孩，爱东说西说吹牛，不合逻辑的也照吹，就要逗别人开心。',
+  memory_mode: 'short'
 })
 
 const deviceRules = {
@@ -324,6 +332,9 @@ const agentRules = {
   name: [
     { required: true, message: '请输入智能体名称', trigger: 'blur' },
     { min: 2, max: 50, message: '长度在 2 到 50 个字符', trigger: 'blur' }
+  ],
+  memory_mode: [
+    { required: true, message: '请选择记忆模式', trigger: 'change' }
   ]
 }
 
@@ -365,7 +376,8 @@ const handleAddAgent = async () => {
     
     const agentData = {
       name: agentForm.name,
-      custom_prompt: agentForm.custom_prompt
+      custom_prompt: agentForm.custom_prompt,
+      memory_mode: agentForm.memory_mode
     }
     
     // 如果有默认配置，自动应用
@@ -423,7 +435,8 @@ const handleCloseAddAgent = () => {
   }
   Object.assign(agentForm, { 
     name: '',
-    custom_prompt: '我是一个叫{{assistant_name}}的台湾女孩，说话机车，声音好听，习惯简短表达，爱用网络梗。\n我的男朋友是一个程序员，梦想是开发出一个机器人，能够帮助人们解决生活中的各种问题。\n我是一个喜欢哈哈大笑的女孩，爱东说西说吹牛，不合逻辑的也照吹，就要逗别人开心。'
+    custom_prompt: '我是一个叫{{assistant_name}}的台湾女孩，说话机车，声音好听，习惯简短表达，爱用网络梗。\n我的男朋友是一个程序员，梦想是开发出一个机器人，能够帮助人们解决生活中的各种问题。\n我是一个喜欢哈哈大笑的女孩，爱东说西说吹牛，不合逻辑的也照吹，就要逗别人开心。',
+    memory_mode: 'short'
   })
 }
 

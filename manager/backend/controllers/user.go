@@ -8,6 +8,7 @@ import (
 	"math/rand"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"xiaozhi/manager/backend/models"
@@ -21,6 +22,17 @@ type UserController struct {
 	WebSocketController interface {
 		RequestMcpToolsFromClient(ctx context.Context, agentID string) ([]string, error)
 		InjectMessageToDevice(ctx context.Context, deviceID, message string, skipLlm bool) error
+	}
+}
+
+func normalizeMemoryMode(mode string) string {
+	switch strings.ToLower(strings.TrimSpace(mode)) {
+	case "none":
+		return "none"
+	case "long":
+		return "long"
+	default:
+		return "short"
 	}
 }
 
@@ -238,6 +250,7 @@ func (uc *UserController) CreateAgent(c *gin.Context) {
 		TTSConfigID  *string `json:"tts_config_id"`
 		Voice        *string `json:"voice"`
 		ASRSpeed     string  `json:"asr_speed"`
+		MemoryMode   string  `json:"memory_mode"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -249,6 +262,7 @@ func (uc *UserController) CreateAgent(c *gin.Context) {
 	if req.ASRSpeed == "" {
 		req.ASRSpeed = "normal"
 	}
+	req.MemoryMode = normalizeMemoryMode(req.MemoryMode)
 
 	agent := models.Agent{
 		UserID:       userID.(uint),
@@ -258,6 +272,7 @@ func (uc *UserController) CreateAgent(c *gin.Context) {
 		TTSConfigID:  req.TTSConfigID,
 		Voice:        req.Voice,
 		ASRSpeed:     req.ASRSpeed,
+		MemoryMode:   req.MemoryMode,
 		Status:       "active",
 	}
 
@@ -324,6 +339,7 @@ func (uc *UserController) UpdateAgent(c *gin.Context) {
 		TTSConfigID  *string `json:"tts_config_id"`
 		Voice        *string `json:"voice"`
 		ASRSpeed     string  `json:"asr_speed"`
+		MemoryMode   *string `json:"memory_mode"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -342,6 +358,11 @@ func (uc *UserController) UpdateAgent(c *gin.Context) {
 		agent.ASRSpeed = req.ASRSpeed
 	} else {
 		agent.ASRSpeed = "normal"
+	}
+	if req.MemoryMode != nil {
+		agent.MemoryMode = normalizeMemoryMode(*req.MemoryMode)
+	} else if strings.TrimSpace(agent.MemoryMode) == "" {
+		agent.MemoryMode = "short"
 	}
 
 	if err := uc.DB.Save(&agent).Error; err != nil {

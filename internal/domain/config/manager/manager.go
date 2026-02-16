@@ -79,8 +79,9 @@ func (c *ConfigManager) GetUserConfig(ctx context.Context, deviceID string) (typ
 				TTSConfigID *string  `json:"tts_config_id"`
 				Voice       *string  `json:"voice"`
 			} `json:"voice_identify"`
-			Prompt  string `json:"prompt"`
-			AgentId string `json:"agent_id"`
+			Prompt     string `json:"prompt"`
+			AgentId    string `json:"agent_id"`
+			MemoryMode string `json:"memory_mode"`
 		} `json:"data"`
 	}
 
@@ -153,7 +154,11 @@ func (c *ConfigManager) GetUserConfig(ctx context.Context, deviceID string) (typ
 			Config:   parseJsonData(response.Data.Memory.JsonData),
 		},
 		VoiceIdentify: voiceIdentifyData,
+		MemoryMode:    response.Data.MemoryMode,
 		AgentId:       response.Data.AgentId,
+	}
+	if strings.TrimSpace(config.MemoryMode) == "" {
+		config.MemoryMode = "short"
 	}
 
 	log.Log().Infof("成功获取设备配置: deviceId: %s, config: %+v", deviceID, config)

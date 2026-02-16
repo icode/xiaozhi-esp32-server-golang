@@ -42,6 +42,13 @@
           </el-tag>
         </template>
       </el-table-column>
+      <el-table-column label="记忆模式" width="120">
+        <template #default="{ row }">
+          <el-tag :type="getMemoryModeType(row.memory_mode)">
+            {{ getMemoryModeText(row.memory_mode) }}
+          </el-tag>
+        </template>
+      </el-table-column>
       <el-table-column prop="status" label="状态" width="100">
         <template #default="{ row }">
           <el-tag :type="row.status === 'active' ? 'success' : 'info'">
@@ -110,6 +117,13 @@
             <el-option label="正常" value="normal" />
             <el-option label="耐心" value="patient" />
             <el-option label="快速" value="fast" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="记忆模式" prop="memory_mode">
+          <el-select v-model="agentForm.memory_mode" style="width: 100%">
+            <el-option label="无记忆" value="none" />
+            <el-option label="短记忆" value="short" />
+            <el-option label="长记忆" value="long" />
           </el-select>
         </el-form-item>
         <el-form-item label="状态" prop="status">
@@ -240,6 +254,7 @@ const agentForm = ref({
   llm_config_id: null,
   tts_config_id: null,
   asr_speed: 'normal',
+  memory_mode: 'short',
   status: 'active'
 })
 
@@ -247,6 +262,7 @@ const agentRules = {
   user_id: [{ required: true, message: '请输入用户ID', trigger: 'blur' }],
   name: [{ required: true, message: '请输入智能体昵称', trigger: 'blur' }],
   asr_speed: [{ required: true, message: '请选择语音识别速度', trigger: 'change' }],
+  memory_mode: [{ required: true, message: '请选择记忆模式', trigger: 'change' }],
   status: [{ required: true, message: '请选择状态', trigger: 'change' }]
 }
 
@@ -298,6 +314,7 @@ const editAgent = (agent) => {
     llm_config_id: agent.llm_config_id,
     tts_config_id: agent.tts_config_id,
     asr_speed: agent.asr_speed || 'normal',
+    memory_mode: agent.memory_mode || 'short',
     status: agent.status
   }
   showAddDialog.value = true
@@ -361,6 +378,7 @@ const resetForm = () => {
     llm_config_id: null,
     tts_config_id: null,
     asr_speed: 'normal',
+    memory_mode: 'short',
     status: 'active'
   }
   
@@ -398,6 +416,24 @@ const getASRSpeedType = (speed) => {
     'fast': 'success'
   }
   return typeMap[speed] || ''
+}
+
+const getMemoryModeText = (mode) => {
+  const modeMap = {
+    none: '无记忆',
+    short: '短记忆',
+    long: '长记忆'
+  }
+  return modeMap[mode] || '短记忆'
+}
+
+const getMemoryModeType = (mode) => {
+  const typeMap = {
+    none: 'info',
+    short: '',
+    long: 'success'
+  }
+  return typeMap[mode] || ''
 }
 
 // 显示MCP接入点

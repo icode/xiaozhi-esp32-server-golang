@@ -48,6 +48,7 @@ type UConfig struct {
 	Vad           VadConfig                   `json:"vad"`
 	Memory        MemoryConfig                `json:"memory"`
 	VoiceIdentify map[string]SpeakerGroupInfo `json:"voice_identify"` // 声纹识别配置
+	MemoryMode    string                      `json:"memory_mode"`    // 记忆模式: none/short/long
 	AgentId       string                      `json:"agent_id"`       //所属agent_id
 }
 

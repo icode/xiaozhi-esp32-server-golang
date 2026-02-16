@@ -127,6 +127,12 @@ const routes = [
             meta: { title: 'Memory配置管理' }
           },
           {
+            path: 'chat-settings',
+            name: 'ChatSettings',
+            component: () => import('../views/admin/ChatSettings.vue'),
+            meta: { title: '聊天设置' }
+          },
+          {
             path: 'vision-config',
             name: 'VisionConfig',
             component: () => import('../views/admin/VisionConfig.vue'),

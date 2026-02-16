@@ -40,6 +40,17 @@ func getMapKeys(m map[string]interface{}) []string {
 	return keys
 }
 
+func normalizeAgentMemoryMode(mode string) string {
+	switch strings.ToLower(strings.TrimSpace(mode)) {
+	case "none":
+		return "none"
+	case "long":
+		return "long"
+	default:
+		return "short"
+	}
+}
+
 type AdminController struct {
 	DB                  *gorm.DB
 	WebSocketController *WebSocketController
@@ -75,10 +86,12 @@ func (ac *AdminController) GetDeviceConfigs(c *gin.Context) {
 		VoiceIdentify map[string]SpeakerGroupInfo `json:"voice_identify"`
 		Prompt        string                      `json:"prompt"`
 		AgentID       string                      `json:"agent_id"`
+		MemoryMode    string                      `json:"memory_mode"`
 		ConfigSource  string                      `json:"config_source"` // 新增：配置来源
 	}
 
 	var response ConfigResponse
+	response.MemoryMode = "short"
 	var configSource string // 记录配置来源
 
 	// 查找设备
@@ -113,6 +126,10 @@ func (ac *AdminController) GetDeviceConfigs(c *gin.Context) {
 				return
 			}
 		}
+	}
+
+	if deviceFound && agent.ID != 0 {
+		response.MemoryMode = normalizeAgentMemoryMode(agent.MemoryMode)
 	}
 
 	// ==================== 配置获取逻辑（带优先级） ====================
@@ -363,7 +380,7 @@ func (ac *AdminController) GetDeviceConfigs(c *gin.Context) {
 // getSystemConfigsData 获取系统配置数据（与 GetSystemConfigs 返回的 data 一致），供接口与 WebSocket 推送复用
 func (ac *AdminController) getSystemConfigsData() (gin.H, error) {
 	var allConfigs []models.Config
-	if err := ac.DB.Where("type IN (?)", []string{"mqtt", "mqtt_server", "udp", "ota", "mcp", "local_mcp", "voice_identify", "tts", "vad", "asr", "llm", "vision"}).Find(&allConfigs).Error; err != nil {
+	if err := ac.DB.Where("type IN (?)", []string{"mqtt", "mqtt_server", "udp", "ota", "mcp", "local_mcp", "voice_identify", "tts", "vad", "asr", "llm", "vision", "auth", "chat"}).Find(&allConfigs).Error; err != nil {
 		return nil, err
 	}
 
@@ -535,6 +552,12 @@ func (ac *AdminController) getSystemConfigsData() (gin.H, error) {
 	}
 	if configs, exists := configsByType["ota"]; exists && len(configs) > 0 {
 		response["ota"] = selectAndParseConfig(configs)
+	}
+	if configs, exists := configsByType["auth"]; exists && len(configs) > 0 {
+		response["auth"] = selectAndParseConfig(configs)
+	}
+	if configs, exists := configsByType["chat"]; exists && len(configs) > 0 {
+		response["chat"] = selectAndParseConfig(configs)
 	}
 
 	// 特殊处理MCP配置，将mcp和local_mcp分开
@@ -830,7 +853,7 @@ func (ac *AdminController) getSystemConfigsData() (gin.H, error) {
 	return response, nil
 }
 
-// GetSystemConfigs 获取系统配置信息，包括mqtt, mqtt_server, udp, ota, mcp, local_mcp, voice_identify, tts, vad, asr, llm, vision
+// GetSystemConfigs 获取系统配置信息，包括mqtt, mqtt_server, udp, ota, mcp, local_mcp, voice_identify, tts, vad, asr, llm, vision, auth, chat
 func (ac *AdminController) GetSystemConfigs(c *gin.Context) {
 	data, err := ac.getSystemConfigsData()
 	if err != nil {
@@ -2346,6 +2369,7 @@ func (ac *AdminController) CreateAgent(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	agent.MemoryMode = normalizeAgentMemoryMode(agent.MemoryMode)
 
 	if err := ac.DB.Create(&agent).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "创建智能体失败"})
@@ -2368,6 +2392,7 @@ func (ac *AdminController) UpdateAgent(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	agent.MemoryMode = normalizeAgentMemoryMode(agent.MemoryMode)
 
 	if err := ac.DB.Save(&agent).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "更新智能体失败"})
@@ -2645,6 +2670,171 @@ func (ac *AdminController) UpdateVisionBaseConfig(c *gin.Context) {
 
 	ac.notifySystemConfigChanged()
 	c.JSON(http.StatusOK, gin.H{"message": "Vision base config updated successfully"})
+}
+
+// GetChatSettings 获取聊天设置（auth.enable + chat.*）
+func (ac *AdminController) GetChatSettings(c *gin.Context) {
+	response := gin.H{
+		"auth": gin.H{
+			"enable": false,
+		},
+		"chat": gin.H{
+			"max_idle_duration":         30000,
+			"chat_max_silence_duration": 400,
+			"realtime_mode":             4,
+		},
+	}
+
+	var authConfig models.Config
+	if err := ac.DB.Where("type = ?", "auth").Order("is_default DESC, id ASC").First(&authConfig).Error; err == nil {
+		var authData map[string]interface{}
+		if authConfig.JsonData != "" && json.Unmarshal([]byte(authConfig.JsonData), &authData) == nil {
+			if enable, ok := authData["enable"].(bool); ok {
+				response["auth"].(gin.H)["enable"] = enable
+			}
+		}
+	}
+
+	var chatConfig models.Config
+	if err := ac.DB.Where("type = ?", "chat").Order("is_default DESC, id ASC").First(&chatConfig).Error; err == nil {
+		var chatData map[string]interface{}
+		if chatConfig.JsonData != "" && json.Unmarshal([]byte(chatConfig.JsonData), &chatData) == nil {
+			if maxIdle, ok := chatData["max_idle_duration"].(float64); ok && int64(maxIdle) >= 0 {
+				response["chat"].(gin.H)["max_idle_duration"] = int64(maxIdle)
+			}
+			if maxSilence, ok := chatData["chat_max_silence_duration"].(float64); ok && int64(maxSilence) >= 0 {
+				response["chat"].(gin.H)["chat_max_silence_duration"] = int64(maxSilence)
+			}
+			if realtimeMode, ok := chatData["realtime_mode"].(float64); ok && int(realtimeMode) >= 1 && int(realtimeMode) <= 4 {
+				response["chat"].(gin.H)["realtime_mode"] = int(realtimeMode)
+			}
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": response})
+}
+
+// UpdateChatSettings 更新聊天设置（auth.enable + chat.*）
+func (ac *AdminController) UpdateChatSettings(c *gin.Context) {
+	var req struct {
+		Auth struct {
+			Enable bool `json:"enable"`
+		} `json:"auth"`
+		Chat struct {
+			MaxIdleDuration        int64 `json:"max_idle_duration"`
+			ChatMaxSilenceDuration int64 `json:"chat_max_silence_duration"`
+			RealtimeMode           int   `json:"realtime_mode"`
+		} `json:"chat"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if req.Chat.MaxIdleDuration < 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "chat.max_idle_duration 不能小于 0，0 表示不限制"})
+		return
+	}
+	if req.Chat.ChatMaxSilenceDuration < 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "chat.chat_max_silence_duration 不能小于 0"})
+		return
+	}
+	if req.Chat.RealtimeMode < 1 || req.Chat.RealtimeMode > 4 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "chat.realtime_mode 必须在 1-4 之间"})
+		return
+	}
+
+	authJSON, err := json.Marshal(map[string]interface{}{
+		"enable": req.Auth.Enable,
+	})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "auth 配置序列化失败"})
+		return
+	}
+	chatJSON, err := json.Marshal(map[string]interface{}{
+		"max_idle_duration":         req.Chat.MaxIdleDuration,
+		"chat_max_silence_duration": req.Chat.ChatMaxSilenceDuration,
+		"realtime_mode":             req.Chat.RealtimeMode,
+	})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "chat 配置序列化失败"})
+		return
+	}
+
+	tx := ac.DB.Begin()
+	if tx.Error != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "启动事务失败"})
+		return
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+		}
+	}()
+
+	upsertConfig := func(configType, configID, name string, jsonData []byte) error {
+		var cfg models.Config
+		err := tx.Where("type = ? AND config_id = ?", configType, configID).First(&cfg).Error
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			if err := tx.Model(&models.Config{}).Where("type = ?", configType).Update("is_default", false).Error; err != nil {
+				return err
+			}
+			cfg = models.Config{
+				Type:      configType,
+				Name:      name,
+				ConfigID:  configID,
+				Provider:  "",
+				JsonData:  string(jsonData),
+				Enabled:   true,
+				IsDefault: true,
+			}
+			return tx.Create(&cfg).Error
+		}
+		if err != nil {
+			return err
+		}
+
+		if err := tx.Model(&models.Config{}).Where("type = ? AND id != ?", configType, cfg.ID).Update("is_default", false).Error; err != nil {
+			return err
+		}
+
+		cfg.Name = name
+		cfg.Provider = ""
+		cfg.JsonData = string(jsonData)
+		cfg.Enabled = true
+		cfg.IsDefault = true
+		return tx.Save(&cfg).Error
+	}
+
+	if err := upsertConfig("auth", "auth", "auth", authJSON); err != nil {
+		tx.Rollback()
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "保存 auth 设置失败: " + err.Error()})
+		return
+	}
+	if err := upsertConfig("chat", "chat", "chat", chatJSON); err != nil {
+		tx.Rollback()
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "保存 chat 设置失败: " + err.Error()})
+		return
+	}
+
+	if err := tx.Commit().Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "提交事务失败"})
+		return
+	}
+
+	ac.notifySystemConfigChanged()
+	c.JSON(http.StatusOK, gin.H{
+		"message": "聊天设置更新成功",
+		"data": gin.H{
+			"auth": gin.H{"enable": req.Auth.Enable},
+			"chat": gin.H{
+				"max_idle_duration":         req.Chat.MaxIdleDuration,
+				"chat_max_silence_duration": req.Chat.ChatMaxSilenceDuration,
+				"realtime_mode":             req.Chat.RealtimeMode,
+			},
+		},
+	})
 }
 
 func (ac *AdminController) CreateVisionConfig(c *gin.Context) {
@@ -2925,6 +3115,8 @@ func (ac *AdminController) ExportConfigs(c *gin.Context) {
 		Vision        map[string]interface{} `yaml:"vision,omitempty"`
 		Memory        map[string]interface{} `yaml:"memory,omitempty"`
 		VoiceIdentify map[string]interface{} `yaml:"voice_identify,omitempty"`
+		Auth          map[string]interface{} `yaml:"auth,omitempty"`
+		Chat          map[string]interface{} `yaml:"chat,omitempty"`
 		MQTT          map[string]interface{} `yaml:"mqtt,omitempty"`
 		MQTTServer    map[string]interface{} `yaml:"mqtt_server,omitempty"`
 		UDP           map[string]interface{} `yaml:"udp,omitempty"`
@@ -2941,6 +3133,8 @@ func (ac *AdminController) ExportConfigs(c *gin.Context) {
 		Vision:        make(map[string]interface{}),
 		Memory:        make(map[string]interface{}),
 		VoiceIdentify: make(map[string]interface{}),
+		Auth:          make(map[string]interface{}),
+		Chat:          make(map[string]interface{}),
 		MQTT:          make(map[string]interface{}),
 		MQTTServer:    make(map[string]interface{}),
 		UDP:           make(map[string]interface{}),
@@ -3061,6 +3255,14 @@ func (ac *AdminController) ExportConfigs(c *gin.Context) {
 				exportConfig.VoiceIdentify["provider"] = config.ConfigID
 			}
 			exportConfig.VoiceIdentify[config.ConfigID] = jsonData
+		case "auth":
+			for key, value := range jsonData {
+				exportConfig.Auth[key] = value
+			}
+		case "chat":
+			for key, value := range jsonData {
+				exportConfig.Chat[key] = value
+			}
 		case "mcp":
 			// 处理MCP配置，将mcp和local_mcp分开
 			if mcpData, exists := jsonData["mcp"]; exists {
@@ -3177,7 +3379,7 @@ func (ac *AdminController) ImportConfigs(c *gin.Context) {
 	log.Printf("全局角色清空成功，删除了 %d 条记录", result2.RowsAffected)
 
 	// 导入配置 - 只处理实际存在的模块
-	configTypes := []string{"vad", "asr", "llm", "tts", "memory", "ota", "mqtt", "mqtt_server", "udp", "mcp", "local_mcp"}
+	configTypes := []string{"vad", "asr", "llm", "tts", "memory", "auth", "chat", "ota", "mqtt", "mqtt_server", "udp", "mcp", "local_mcp"}
 	log.Printf("开始导入配置，配置类型: %v", configTypes)
 
 	// 处理 voice_identify 配置（映射到 speaker 类型）

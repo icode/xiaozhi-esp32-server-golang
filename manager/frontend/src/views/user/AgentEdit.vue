@@ -182,6 +182,18 @@
           </div>
 
           <div class="form-group">
+            <label class="form-label">记忆</label>
+            <el-select v-model="form.memory_mode" placeholder="请选择记忆模式" size="large" style="width: 100%">
+              <el-option label="无记忆" value="none" />
+              <el-option label="短记忆" value="short" />
+              <el-option label="长记忆" value="long" />
+            </el-select>
+            <div class="form-help">
+              无记忆: LLM不加载历史；短记忆: 加载历史不加载长记忆；长记忆: 加载历史并加载长记忆。
+            </div>
+          </div>
+
+          <div class="form-group">
             <label class="form-label">MCP接入点</label>
             <el-button 
               type="primary" 
@@ -308,7 +320,8 @@ const form = reactive({
   llm_config_id: null,
   tts_config_id: null,
   voice: null,
-  asr_speed: 'normal'
+  asr_speed: 'normal',
+  memory_mode: 'short'
 })
 
 // LLM配置数据
@@ -368,6 +381,7 @@ const loadAgent = async () => {
       name: agent.name || '',
       custom_prompt: agent.custom_prompt || '',
       asr_speed: agent.asr_speed || 'normal',
+      memory_mode: agent.memory_mode || 'short',
       voice: agent.voice || null
     })
     
