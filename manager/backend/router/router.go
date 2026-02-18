@@ -31,6 +31,7 @@ func Setup(db *gorm.DB, cfg *config.Config) *gin.Engine {
 	deviceActivationController := &controllers.DeviceActivationController{DB: db}
 	setupController := &controllers.SetupController{DB: db}
 	speakerGroupController := controllers.NewSpeakerGroupController(db, cfg)
+	voiceCloneController := controllers.NewVoiceCloneController(db, cfg)
 	poolStatsController := controllers.NewPoolStatsController()
 
 	// 初始化聊天历史控制器（使用传入的 cfg，不重新 Load 避免内嵌时读错路径）
@@ -120,6 +121,14 @@ func Setup(db *gorm.DB, cfg *config.Config) *gin.Engine {
 				// 角色模板和音色选项
 				user.GET("/role-templates", userController.GetRoleTemplates)
 				user.GET("/voice-options", userController.GetVoiceOptions)
+				user.GET("/voice-clone/capabilities", voiceCloneController.GetCloneProviderCapabilities)
+				user.POST("/voice-clones", voiceCloneController.CreateVoiceClone)
+				user.GET("/voice-clones", voiceCloneController.GetVoiceClones)
+				user.PUT("/voice-clones/:id", voiceCloneController.UpdateVoiceClone)
+				user.POST("/voice-clones/:id/retry", voiceCloneController.RetryVoiceClone)
+				user.GET("/voice-clones/:id/preview", voiceCloneController.PreviewClonedVoice)
+				user.GET("/voice-clones/:id/audios", voiceCloneController.GetVoiceCloneAudios)
+				user.GET("/voice-clones/audios/:audio_id/file", voiceCloneController.GetVoiceCloneAudioFile)
 
 				// 角色管理（暂时注释，待实现）
 				// user.GET("/roles", adminController.GetRoles)
@@ -286,6 +295,8 @@ func Setup(db *gorm.DB, cfg *config.Config) *gin.Engine {
 				admin.PUT("/users/:id", adminController.UpdateUser)
 				admin.DELETE("/users/:id", adminController.DeleteUser)
 				admin.POST("/users/:id/reset-password", adminController.ResetUserPassword)
+				admin.GET("/users/:id/voice-clone-quotas", adminController.GetUserVoiceCloneQuotas)
+				admin.PUT("/users/:id/voice-clone-quotas", adminController.UpdateUserVoiceCloneQuotas)
 
 				// 配置导入导出
 				admin.GET("/configs/export", adminController.ExportConfigs)
