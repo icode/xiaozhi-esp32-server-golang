@@ -1,4 +1,4 @@
-﻿package main
+package main
 
 import (
 	"encoding/json"
@@ -8,6 +8,7 @@ import (
 	_ "net/http/pprof"
 	"os"
 	"os/signal"
+	"strings"
 	"sync"
 	"syscall"
 	"xiaozhi-esp32-server-golang/internal/app/server"
@@ -23,7 +24,7 @@ func main() {
 	managerEnable := flag.Bool("manager-enable", defaultManagerEnable, "是否启用内嵌 manager")
 	managerConfig := flag.String("manager-config", "", "manager 配置文件路径，启用时可选，默认 manager/backend/config/config.json")
 	asrEnable := flag.Bool("asr-enable", defaultAsrEnable, "是否启用内嵌 asr_server")
-	asrConfig := flag.String("asr-config", "", "asr_server 配置文件路径，启用时可选，默认 asr_server/config.json")
+	asrConfig := flag.String("asr-config", "", "asr_server 配置文件路径，启用时可选，默认 asr_server.json")
 	flag.Parse()
 
 	if *configFile == "" {
@@ -35,12 +36,18 @@ func main() {
 	if *managerEnable {
 		StartManagerHTTP(*managerConfig)
 	}
-	if *asrEnable {
-		StartAsrServerHTTP(*asrConfig)
-	}
+
 	err := Init(*configFile)
 	if err != nil {
 		return
+	}
+
+	if strings.EqualFold(strings.TrimSpace(viper.GetString("asr.provider")), "embed") {
+		// 使用 Init 后的最终配置判断并预初始化内嵌 ASR，避免后续懒加载。
+		InitAsrServerEmbed(*asrConfig)
+	}
+	if *asrEnable {
+		StartAsrServerHTTP(*asrConfig)
 	}
 
 	// 根据配置启动 pprof 服务

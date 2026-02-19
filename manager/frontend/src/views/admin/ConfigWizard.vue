@@ -232,6 +232,9 @@ const asrForm = reactive({
   name: '默认ASR',
   config_id: 'funasr_default',
   provider: 'funasr',
+  embed: {
+    mode: 'offline'
+  },
   funasr: {
     host: '127.0.0.1',
     port: 10095,
@@ -769,7 +772,10 @@ async function loadAsrIfExists() {
     asrForm.config_id = config.config_id
     asrForm.provider = config.provider || 'funasr'
     const data = JSON.parse(config.json_data || '{}')
-    if (config.provider === 'doubao') {
+    if (config.provider === 'embed') {
+      Object.assign(asrForm.embed, data.embed || data)
+      if (!asrForm.embed.mode) asrForm.embed.mode = 'offline'
+    } else if (config.provider === 'doubao') {
       Object.assign(asrForm.doubao, data.doubao || data)
     } else if (config.provider === 'aliyun_funasr') {
       Object.assign(asrForm.aliyun_funasr, data.aliyun_funasr || data)

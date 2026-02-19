@@ -80,19 +80,26 @@ func NewChatSession(clientState *ClientState, serverTransport *ServerTransport, 
 
 	// 如果启用声纹识别，创建声纹管理器
 	if clientState.IsSpeakerEnabled() {
-		// 从系统配置（viper）获取声纹服务地址
-		baseURL := viper.GetString("voice_identify.base_url")
-		if baseURL != "" {
-			// 设置服务地址和阈值到配置中
-			speakerConfig := map[string]interface{}{
-				"base_url": baseURL,
-			}
-			// 读取阈值配置，如果未配置则使用默认值 0.6
-			if viper.IsSet("voice_identify.threshold") {
-				threshold := viper.GetFloat64("voice_identify.threshold")
-				speakerConfig["threshold"] = threshold
-			}
+		// 优先读取 speaker_service（新配置），未配置时回退 voice_identify（旧配置）
+		baseURL := strings.TrimSpace(viper.GetString("speaker_service.url"))
+		if baseURL == "" {
+			baseURL = strings.TrimSpace(viper.GetString("voice_identify.base_url"))
+		}
 
+		serviceMode := strings.ToLower(strings.TrimSpace(viper.GetString("speaker_service.mode")))
+		if serviceMode == "" {
+			serviceMode = strings.ToLower(strings.TrimSpace(viper.GetString("voice_identify.service")))
+		}
+
+		speakerConfig := map[string]interface{}{}
+		if baseURL != "" {
+			speakerConfig["base_url"] = baseURL
+		}
+		if serviceMode != "" {
+			speakerConfig["service"] = serviceMode
+		}
+
+		if serviceMode == "embed" || baseURL != "" {
 			provider, err := speaker.GetSpeakerProvider(speakerConfig)
 			if err != nil {
 				log.Warnf("创建声纹识别提供者失败: %v", err)
