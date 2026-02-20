@@ -17,3 +17,6 @@ func StartAsrServerHTTP(configPath string) {
 
 // StopAsrServerHTTP 未启用 asr_server 编译时的空实现。
 func StopAsrServerHTTP() {}
+
+// ShutdownAsrServer 未启用 asr_server 编译时的空实现。
+func ShutdownAsrServer() {}

@@ -148,9 +148,7 @@ func main() {
 	if *managerEnable {
 		StopManagerHTTP()
 	}
-	if *asrEnable {
-		StopAsrServerHTTP()
-	}
+	ShutdownAsrServer()
 
 	log.Info("服务器已关闭")
 }

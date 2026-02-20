@@ -65,3 +65,10 @@ func StopAsrServerHTTP() {
 		log.Info("asr_server HTTP 服务已关闭")
 	}
 }
+
+// ShutdownAsrServer 关闭本进程内 asr_server（含 embed/http 共享引擎资源）。
+func ShutdownAsrServer() {
+	StopAsrServerHTTP()
+	server.SharedEngineProvider().Close()
+	log.Info("asr_server 共享引擎资源已释放")
+}
