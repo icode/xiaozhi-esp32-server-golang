@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	stdlog "log"
 	"net/http"
 	_ "net/http/pprof"
 	"os"
@@ -15,10 +16,13 @@ import (
 	user_config "xiaozhi-esp32-server-golang/internal/domain/config"
 	log "xiaozhi-esp32-server-golang/logger"
 
+	"github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 )
 
 func main() {
+	bootstrapEarlyLogging()
+
 	// 解析命令行参数
 	configFile := flag.String("c", defaultConfigFilePath, "配置文件路径")
 	managerEnable := flag.Bool("manager-enable", defaultManagerEnable, "是否启用内嵌 manager")
@@ -151,6 +155,13 @@ func main() {
 	ShutdownAsrServer()
 
 	log.Info("服务器已关闭")
+}
+
+// bootstrapEarlyLogging 配置启动早期日志输出，避免日志系统初始化前写入 stderr 导致终端显示为红字。
+func bootstrapEarlyLogging() {
+	log.UseStdout()
+	logrus.SetOutput(os.Stdout)
+	stdlog.SetOutput(os.Stdout)
 }
 
 func udpListenChanged(newUdpCfg interface{}, oldUdpCfg interface{}) bool {
