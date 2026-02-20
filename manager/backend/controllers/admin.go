@@ -576,42 +576,83 @@ func (ac *AdminController) getSystemConfigsData() (gin.H, error) {
 		response["local_mcp"] = selectAndParseConfig(configs)
 	}
 
-	// 处理 voice_identify 配置（与控制台配置结构一致，包含 base_url、threshold、enable）
-	// 业务启用由 json_data 中的 enable 表示；DB 的 enabled 列仅作列表项开关，不覆盖业务 enable
-	baseURL := os.Getenv("SPEAKER_SERVICE_URL")
+	// 处理 voice_identify 配置：
+	// 1) 保留旧结构（voice_identify.base_url/threshold/enable/service）
+	// 2) 同步输出新结构（speaker_service.mode/url），便于 embed/http 明确配置
+	// 业务启用由 json_data.enable 表示；DB 的 enabled 列仅作列表项开关，不覆盖业务 enable
+	baseURL := strings.TrimSpace(os.Getenv("SPEAKER_SERVICE_URL"))
+	serviceMode := strings.ToLower(strings.TrimSpace(os.Getenv("SPEAKER_SERVICE_MODE")))
 	enabled := true  // 默认启用
 	threshold := 0.4 // 默认阈值
+	hasSpeakerConfig := baseURL != "" || serviceMode != ""
 
 	if configs, exists := configsByType["voice_identify"]; exists && len(configs) > 0 {
 		selected := getSelectedConfig(configs)
+		if selected != nil {
+			hasSpeakerConfig = true
+		}
 		if selected != nil && selected.JsonData != "" {
 			var configData map[string]interface{}
 			if err := json.Unmarshal([]byte(selected.JsonData), &configData); err == nil {
 				// 业务 enable 优先从 json_data 读取
-				if v, ok := configData["enable"]; ok {
-					if b, ok := v.(bool); ok {
-						enabled = b
-					}
+				if v, ok := configData["enable"].(bool); ok {
+					enabled = v
 				}
+
+				// 读取 service 配置（原结构上新增 mode 字段）
 				if service, ok := configData["service"].(map[string]interface{}); ok {
-					if url, ok := service["base_url"].(string); ok && url != "" && baseURL == "" {
-						baseURL = url
-					}
-					if thresholdVal, ok := service["threshold"]; ok {
-						if thresholdFloat, ok := thresholdVal.(float64); ok && thresholdFloat >= 0 && thresholdFloat <= 1 {
-							threshold = thresholdFloat
+					if modeVal, ok := service["mode"].(string); ok {
+						mode := strings.ToLower(strings.TrimSpace(modeVal))
+						if mode != "" && serviceMode == "" {
+							serviceMode = mode
 						}
+					}
+					if urlVal, ok := service["base_url"].(string); ok {
+						urlVal = strings.TrimSpace(urlVal)
+						if urlVal != "" && baseURL == "" {
+							baseURL = urlVal
+						}
+					}
+					if thresholdVal, ok := service["threshold"].(float64); ok && thresholdVal >= 0 && thresholdVal <= 1 {
+						threshold = thresholdVal
 					}
 				}
 			}
 		}
 	}
-	// 如果获取到了 base_url，添加到响应中
-	if baseURL != "" {
-		response["voice_identify"] = gin.H{
-			"base_url":  baseURL,
+
+	switch serviceMode {
+	case "", "http", "embed":
+	default:
+		log.Printf("voice_identify.service.mode 配置非法: %s，回退 http", serviceMode)
+		serviceMode = "http"
+	}
+	if serviceMode == "" && baseURL != "" {
+		serviceMode = "http"
+	}
+
+	if hasSpeakerConfig {
+		voiceIdentifyConfig := gin.H{
 			"threshold": threshold,
 			"enable":    enabled,
+		}
+		if baseURL != "" {
+			voiceIdentifyConfig["base_url"] = baseURL
+		}
+		if serviceMode != "" {
+			voiceIdentifyConfig["service"] = serviceMode
+		}
+		response["voice_identify"] = voiceIdentifyConfig
+
+		speakerServiceConfig := gin.H{}
+		if serviceMode != "" {
+			speakerServiceConfig["mode"] = serviceMode
+		}
+		if baseURL != "" {
+			speakerServiceConfig["url"] = baseURL
+		}
+		if len(speakerServiceConfig) > 0 {
+			response["speaker_service"] = speakerServiceConfig
 		}
 	}
 

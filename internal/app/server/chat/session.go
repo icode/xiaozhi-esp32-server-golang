@@ -98,6 +98,9 @@ func NewChatSession(clientState *ClientState, serverTransport *ServerTransport, 
 		if serviceMode != "" {
 			speakerConfig["service"] = serviceMode
 		}
+		if viper.IsSet("voice_identify.threshold") {
+			speakerConfig["threshold"] = viper.GetFloat64("voice_identify.threshold")
+		}
 
 		if serviceMode == "embed" || baseURL != "" {
 			provider, err := speaker.GetSpeakerProvider(speakerConfig)
