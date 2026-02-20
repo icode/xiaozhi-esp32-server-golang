@@ -46,8 +46,11 @@ func main() {
 		return
 	}
 
-	if strings.EqualFold(strings.TrimSpace(viper.GetString("asr.provider")), "embed") {
+	if shouldInitAsrServerEmbed() {
 		// 使用 Init 后的最终配置判断并预初始化内嵌 ASR，避免后续懒加载。
+		// 触发条件：
+		// 1) ASR provider 为 embed
+		// 2) 声纹服务模式为 embed（即使 ASR provider 不是 embed，也需要共享引擎）
 		InitAsrServerEmbed(*asrConfig)
 	}
 	if *asrEnable {
@@ -190,4 +193,32 @@ func udpListenHostPort(cfg interface{}) (string, int) {
 		return "", 0
 	}
 	return parsed.ListenHost, parsed.ListenPort
+}
+
+// shouldInitAsrServerEmbed 判断是否需要预初始化内嵌 asr_server 共享引擎。
+func shouldInitAsrServerEmbed() bool {
+	asrSelected := strings.TrimSpace(viper.GetString("asr.provider"))
+	if strings.EqualFold(asrSelected, "embed") {
+		return true
+	}
+
+	// manager 下发场景中 asr.provider 可能是默认 config_id（例如 "asr_embed_1"），
+	// 需要反查 asr.<config_id>.provider 是否为 embed。
+	if asrSelected != "" {
+		asrMap := viper.GetStringMap("asr")
+		if selectedCfg, ok := asrMap[asrSelected].(map[string]interface{}); ok {
+			if p, ok := selectedCfg["provider"].(string); ok && strings.EqualFold(strings.TrimSpace(p), "embed") {
+				return true
+			}
+		}
+	}
+
+	// 新配置优先：speaker_service.mode
+	serviceMode := strings.ToLower(strings.TrimSpace(viper.GetString("speaker_service.mode")))
+	// 兼容旧配置：voice_identify.service
+	if serviceMode == "" {
+		serviceMode = strings.ToLower(strings.TrimSpace(viper.GetString("voice_identify.service")))
+	}
+
+	return serviceMode == "embed"
 }
