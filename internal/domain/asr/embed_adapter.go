@@ -14,20 +14,54 @@ import (
 	"voice_server/server"
 )
 
-// AsrEmbedAdapter 仅做薄封装，底层实现复用 asr_server 的统一内嵌 ASR 服务。
-type AsrEmbedAdapter struct {
-	engine core.Engine
+const (
+	embedMode                 = "offline"
+	DefaultEmbedAsrConfigPath = "asr_server.json"
+)
+
+// EmbedConfig embed 适配器配置。
+type EmbedConfig struct {
+	SampleRate int
+	UseVAD     bool
 }
 
-const embedMode = "offline"
-const DefaultEmbedAsrConfigPath = "asr_server.json"
+// EmbedConfigFromMap 从 map 读取 embed 配置。
+func EmbedConfigFromMap(config map[string]interface{}) EmbedConfig {
+	conf := EmbedConfig{
+		SampleRate: audio.SampleRate,
+		UseVAD:     true,
+	}
 
-func NewAsrEmbedAdapter(_ map[string]interface{}) (AsrProvider, error) {
+	if sampleRate, ok := config["sample_rate"].(int); ok && sampleRate > 0 {
+		conf.SampleRate = sampleRate
+	}
+	if useVAD, ok := config["use_vad"].(bool); ok {
+		conf.UseVAD = useVAD
+	}
+
+	return conf
+}
+
+// AsrEmbedAdapter 适配 asr_server 进程内引擎到 AsrProvider。
+type AsrEmbedAdapter struct {
+	engine core.Engine
+	config EmbedConfig
+}
+
+// NewAsrEmbedAdapter 创建 embed 适配器。
+func NewAsrEmbedAdapter(config map[string]interface{}) (AsrProvider, error) {
 	engine, err := server.SharedEngineProvider().Engine()
 	if err != nil {
 		return nil, err
 	}
-	return &AsrEmbedAdapter{engine: engine}, nil
+
+	adapterConfig := EmbedConfigFromMap(config)
+	log.Debugf("embed adapter config: %+v", adapterConfig)
+
+	return &AsrEmbedAdapter{
+		engine: engine,
+		config: adapterConfig,
+	}, nil
 }
 
 // InitAsrServerEmbed 统一初始化内嵌 ASR 共享依赖。
@@ -59,13 +93,15 @@ func RequireAsrServerEmbed(configPath string) error {
 	return InitAsrServerEmbed(configPath)
 }
 
+// Process 一次性识别整段音频。
 func (a *AsrEmbedAdapter) Process(pcmData []float32) (string, error) {
 	if a.engine == nil {
 		return "", fmt.Errorf("embed service 未初始化")
 	}
-	return a.engine.RecognizeFloat32(pcmData, audio.SampleRate)
+	return a.recognize(pcmData)
 }
 
+// StreamingRecognize 流式收集音频，结束时返回最终识别结果。
 func (a *AsrEmbedAdapter) StreamingRecognize(ctx context.Context, audioStream <-chan []float32) (chan types.StreamingResult, error) {
 	if a.engine == nil {
 		return nil, fmt.Errorf("embed service 未初始化")
@@ -78,36 +114,14 @@ func (a *AsrEmbedAdapter) StreamingRecognize(ctx context.Context, audioStream <-
 	go func() {
 		defer close(resultChan)
 
-		buffer := make([]float32, 0, audio.SampleRate*3)
+		buffer := make([]float32, 0, a.config.SampleRate*3)
 		for {
 			select {
 			case <-ctx.Done():
 				return
 			case pcm, ok := <-audioStream:
 				if !ok {
-					text, err := a.engine.RecognizeWithVAD(buffer, audio.SampleRate)
-					if err != nil {
-						log.Warnf("embed 识别失败: %v", err)
-						select {
-						case resultChan <- types.StreamingResult{
-							Error:   err,
-							IsFinal: true,
-							AsrType: constants.AsrTypeEmbed,
-							Mode:    embedMode,
-						}:
-						case <-ctx.Done():
-						}
-						return
-					}
-					select {
-					case resultChan <- types.StreamingResult{
-						Text:    text,
-						IsFinal: true,
-						AsrType: constants.AsrTypeEmbed,
-						Mode:    embedMode,
-					}:
-					case <-ctx.Done():
-					}
+					a.emitFinalResult(ctx, resultChan, buffer)
 					return
 				}
 				if len(pcm) > 0 {
@@ -120,11 +134,40 @@ func (a *AsrEmbedAdapter) StreamingRecognize(ctx context.Context, audioStream <-
 	return resultChan, nil
 }
 
+// Close 关闭资源。
 func (a *AsrEmbedAdapter) Close() error {
 	a.engine = nil
 	return nil
 }
 
+// IsValid 检查资源是否有效。
 func (a *AsrEmbedAdapter) IsValid() bool {
 	return a != nil && a.engine != nil
+}
+
+func (a *AsrEmbedAdapter) recognize(pcmData []float32) (string, error) {
+	if a.config.UseVAD {
+		return a.engine.RecognizeWithVAD(pcmData, a.config.SampleRate)
+	}
+	return a.engine.RecognizeFloat32(pcmData, a.config.SampleRate)
+}
+
+func (a *AsrEmbedAdapter) emitFinalResult(ctx context.Context, resultChan chan<- types.StreamingResult, pcmData []float32) {
+	text, err := a.recognize(pcmData)
+	result := types.StreamingResult{
+		Text:    text,
+		IsFinal: true,
+		AsrType: constants.AsrTypeEmbed,
+		Mode:    embedMode,
+	}
+	if err != nil {
+		log.Warnf("embed 识别失败: %v", err)
+		result.Text = ""
+		result.Error = err
+	}
+
+	select {
+	case resultChan <- result:
+	case <-ctx.Done():
+	}
 }
