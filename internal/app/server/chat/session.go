@@ -1024,10 +1024,16 @@ func (s *ChatSession) actionDoChat(ctx context.Context, text string, speakerResu
 	}
 
 	// 获取全局MCP工具列表
-	mcpTools, err := mcp.GetToolsByDeviceId(clientState.DeviceID, clientState.AgentID)
+	mcpTools, err := mcp.GetToolsByDeviceId(clientState.DeviceID, clientState.AgentID, clientState.DeviceConfig.MCPServiceNames)
 	if err != nil {
 		log.Errorf("获取设备 %s 的工具失败: %v", clientState.DeviceID, err)
 		mcpTools = make(map[string]tool.InvokableTool)
+	}
+	if !hasAvailableKnowledgeBase(clientState.DeviceConfig.KnowledgeBases) {
+		if _, ok := mcpTools["search_knowledge"]; ok {
+			delete(mcpTools, "search_knowledge")
+			log.Infof("设备 %s 未关联可用知识库，已移除工具 search_knowledge", clientState.DeviceID)
+		}
 	}
 
 	// 将MCP工具转换为接口格式以便传递给转换函数
@@ -1057,6 +1063,19 @@ func (s *ChatSession) actionDoChat(ctx context.Context, text string, speakerResu
 		return fmt.Errorf("发送带工具的 LLM 请求失败: %v", err)
 	}
 	return nil
+}
+
+func hasAvailableKnowledgeBase(knowledgeBases []types.KnowledgeBaseRef) bool {
+	for _, kb := range knowledgeBases {
+		if strings.EqualFold(strings.TrimSpace(kb.Status), "inactive") {
+			continue
+		}
+		if strings.TrimSpace(kb.ExternalKBID) == "" {
+			continue
+		}
+		return true
+	}
+	return false
 }
 
 // switchTTSForSpeaker 为识别的说话人切换TTS
@@ -1140,6 +1159,13 @@ func (s *ChatSession) switchTTSForSpeaker(speakerResult *speaker.IdentifyResult)
 			ttsConfig["voice"] = *speakerGroupInfo.Voice
 		}
 		log.Debugf("为说话人 %s 设置音色: %s", speakerResult.SpeakerName, *speakerGroupInfo.Voice)
+	}
+	if targetTTSConfig.Provider == "aliyun_qwen" &&
+		speakerGroupInfo.VoiceModelOverride != nil &&
+		strings.TrimSpace(*speakerGroupInfo.VoiceModelOverride) != "" {
+		overrideModel := strings.TrimSpace(*speakerGroupInfo.VoiceModelOverride)
+		ttsConfig["model"] = overrideModel
+		log.Debugf("为说话人 %s 覆盖千问模型: %s", speakerResult.SpeakerName, overrideModel)
 	}
 
 	// 7. 保存完整的 TTS 配置（深拷贝）
