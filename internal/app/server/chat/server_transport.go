@@ -67,12 +67,7 @@ func (s *ServerTransport) SendTtsStop() error {
 }
 
 func (s *ServerTransport) SendMqttGoodbye() error {
-	msg := ServerMessage{
-		Type:      ServerMessageTypeGoodBye,
-		State:     MessageStateStop,
-		SessionID: s.clientState.SessionID,
-	}
-	bytes, err := json.Marshal(msg)
+	bytes, err := BuildGoodbyePayload(s.clientState.SessionID, MessageStateStop)
 	if err != nil {
 		return err
 	}

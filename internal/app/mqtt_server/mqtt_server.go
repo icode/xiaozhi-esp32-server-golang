@@ -4,12 +4,15 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"net"
+	"strings"
 	"sync"
 
 	mqttServer "github.com/mochi-mqtt/server/v2"
 	"github.com/mochi-mqtt/server/v2/listeners"
 	"github.com/spf13/viper"
 
+	client "xiaozhi-esp32-server-golang/internal/data/msg"
 	log "xiaozhi-esp32-server-golang/logger"
 )
 
@@ -108,4 +111,60 @@ func StopMqttServer() error {
 	serverMu.Unlock()
 	log.Info("MQTT 服务器已停止")
 	return nil
+}
+
+// PublishGoodbyeByRemoteIP 向指定远端IP对应的设备客户端发送 goodbye 消息。
+// 返回成功发送的客户端数量。
+func PublishGoodbyeByRemoteIP(remoteIP string) int {
+	remoteIP = strings.TrimSpace(remoteIP)
+	if remoteIP == "" {
+		return 0
+	}
+
+	srv := GetCurrentServer()
+	if srv == nil {
+		return 0
+	}
+
+	payload, err := client.BuildGoodbyePayload("", "")
+	if err != nil {
+		log.Warnf("构造goodbye消息失败 remoteIP=%s err=%v", remoteIP, err)
+		return 0
+	}
+	count := 0
+	for _, cl := range srv.Clients.GetAll() {
+		if cl == nil || isInlineClient(cl) || isAdminUser(cl) {
+			continue
+		}
+
+		if parseRemoteIP(cl.Net.Remote) != remoteIP {
+			continue
+		}
+
+		mac := parseMacFromClientId(cl.ID)
+		if mac == "" {
+			continue
+		}
+
+		topic := fmt.Sprintf("%s%s", client.MDeviceSubTopicPrefix, mac)
+		if err := srv.Publish(topic, payload, false, 0); err != nil {
+			log.Warnf("按IP发送goodbye失败 remoteIP=%s clientID=%s topic=%s err=%v", remoteIP, cl.ID, topic, err)
+			continue
+		}
+		count++
+	}
+
+	return count
+}
+
+func parseRemoteIP(remoteAddr string) string {
+	remoteAddr = strings.TrimSpace(remoteAddr)
+	if remoteAddr == "" {
+		return ""
+	}
+	host, _, err := net.SplitHostPort(remoteAddr)
+	if err != nil {
+		return remoteAddr
+	}
+	return host
 }

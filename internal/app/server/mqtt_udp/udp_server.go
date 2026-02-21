@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"xiaozhi-esp32-server-golang/internal/app/mqtt_server"
 	. "xiaozhi-esp32-server-golang/logger"
 )
 
@@ -24,24 +25,28 @@ type UDPServer struct {
 }*/
 
 type UdpServer struct {
-	conn          *net.UDPConn
-	udpPort       int      //udp server listen port
-	externalHost  string   //udp server external host
-	externalPort  int      //udp server external port
-	nonce2Session sync.Map //nonce => UdpSession
-	addr2Session  sync.Map //addr => UdpSession
-	mqttAdapter   *MqttUdpAdapter
+	conn                   *net.UDPConn
+	udpPort                int      //udp server listen port
+	externalHost           string   //udp server external host
+	externalPort           int      //udp server external port
+	nonce2Session          sync.Map //nonce => UdpSession
+	addr2Session           sync.Map //addr => UdpSession
+	unknownAddr2LastNotify sync.Map //remoteIP => time.Time
+	unknownAddr2DropUntil  sync.Map //remoteAddr => time.Time
+	mqttAdapter            *MqttUdpAdapter
 	sync.RWMutex
 }
 
 // NewUDPServer 创建新的UDP服务器
 func NewUDPServer(udpPort int, externalHost string, externalPort int) *UdpServer {
 	return &UdpServer{
-		udpPort:       udpPort,
-		externalHost:  externalHost,
-		externalPort:  externalPort,
-		nonce2Session: sync.Map{},
-		addr2Session:  sync.Map{},
+		udpPort:                udpPort,
+		externalHost:           externalHost,
+		externalPort:           externalPort,
+		nonce2Session:          sync.Map{},
+		addr2Session:           sync.Map{},
+		unknownAddr2LastNotify: sync.Map{},
+		unknownAddr2DropUntil:  sync.Map{},
 	}
 }
 
@@ -103,6 +108,10 @@ func (s *UdpServer) handlePackets() {
 			continue
 		}
 
+		if s.getUdpSession(addr) == nil && s.shouldDropUnknownAddr(addr, buffer[:n]) {
+			continue
+		}
+
 		// 复制数据，避免并发修改
 		data := make([]byte, n)
 		copy(data, buffer[:n])
@@ -139,16 +148,11 @@ func (s *UdpServer) processPacket(addr *net.UDPAddr, data []byte) {
 		//Debugf("收到数据包, fullNonce: %s, connID: %s", hex.EncodeToString(fullNonce), strConnID)
 		udpSession = s.getSessionByNonce(strConnID)
 		if udpSession == nil {
-			Warnf("session不存在 addr: %s", addr)
+			s.notifyUnknownSessionWithGoodbye(addr)
 			return
 		}
 		udpSession.RemoteAddr = addr
 		s.addUdpSession(addr, udpSession)
-	}
-
-	if udpSession == nil {
-		Warnf("udpSession不存在 addr: %s", addr)
-		return
 	}
 
 	// 更新最后活动时间
@@ -313,8 +317,71 @@ func (s *UdpServer) getUdpSession(addr *net.UDPAddr) *UdpSession {
 
 func (s *UdpServer) addUdpSession(addr *net.UDPAddr, session *UdpSession) {
 	s.addr2Session.Store(addr.String(), session)
+	s.unknownAddr2DropUntil.Delete(addr.String())
 }
 
 func (s *UdpServer) removeUdpSession(addr *net.UDPAddr) {
 	s.addr2Session.Delete(addr.String())
+}
+
+func (s *UdpServer) notifyUnknownSessionWithGoodbye(addr *net.UDPAddr) {
+	if addr == nil || addr.IP == nil {
+		return
+	}
+
+	remoteAddr := addr.String()
+	remoteIP := addr.IP.String()
+	if remoteIP == "" {
+		return
+	}
+
+	now := time.Now()
+	s.unknownAddr2DropUntil.Store(remoteAddr, now.Add(3*time.Second))
+
+	if value, ok := s.unknownAddr2LastNotify.Load(remoteIP); ok {
+		lastTime, ok := value.(time.Time)
+		if ok && now.Sub(lastTime) < 2*time.Second {
+			return
+		}
+	}
+	s.unknownAddr2LastNotify.Store(remoteIP, now)
+
+	sent := mqtt_server.PublishGoodbyeByRemoteIP(remoteIP)
+	if sent > 0 {
+		Infof("未知UDP会话 addr=%s，已按IP发送goodbye: %d", addr.String(), sent)
+	}
+	Debugf("session不存在 addr: %s", addr)
+}
+
+func (s *UdpServer) shouldDropUnknownAddr(addr *net.UDPAddr, data []byte) bool {
+	if addr == nil {
+		return false
+	}
+
+	remoteAddr := addr.String()
+	value, ok := s.unknownAddr2DropUntil.Load(remoteAddr)
+	if !ok {
+		return false
+	}
+
+	deadline, ok := value.(time.Time)
+	if !ok {
+		s.unknownAddr2DropUntil.Delete(remoteAddr)
+		return false
+	}
+
+	// 若该地址已经拿到可用会话，立即解除丢弃状态
+	if len(data) >= 8 {
+		connID := hex.EncodeToString(data[4:8])
+		if s.getSessionByNonce(connID) != nil {
+			s.unknownAddr2DropUntil.Delete(remoteAddr)
+			return false
+		}
+	}
+
+	if time.Now().Before(deadline) {
+		return true
+	}
+	s.unknownAddr2DropUntil.Delete(remoteAddr)
+	return false
 }

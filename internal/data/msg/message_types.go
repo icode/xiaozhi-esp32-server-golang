@@ -67,3 +67,18 @@ type ServerMessage struct {
 	Udp         *UdpConfig               `json:"udp,omitempty"`
 	PayLoad     json.RawMessage          `json:"payload,omitempty"`
 }
+
+// BuildGoodbyePayload 构造服务端下行 goodbye 消息。
+// sessionID 为空时不携带该字段；state 为空时不携带该字段。
+func BuildGoodbyePayload(sessionID string, state string) ([]byte, error) {
+	msg := struct {
+		Type      string `json:"type"`
+		SessionID string `json:"session_id,omitempty"`
+		State     string `json:"state,omitempty"`
+	}{
+		Type:      ServerMessageTypeGoodBye,
+		SessionID: sessionID,
+		State:     state,
+	}
+	return json.Marshal(msg)
+}
