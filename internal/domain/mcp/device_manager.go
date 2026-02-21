@@ -269,6 +269,8 @@ func (dc *McpClientInstance) findTools() (*mcp.ListToolsResult, error) {
 // handleJSONRPCNotification 处理JSON-RPC通知
 func (dc *McpClientInstance) handleJSONRPCNotification(notification mcp.JSONRPCNotification) {
 	switch notification.Method {
+	case "notifications/initialized":
+		// MCP 标准初始化完成通知(mark3labs/mcp-go)
 	case "notifications/progress":
 		//handleProgressNotification(notification)
 	case "notifications/message":
