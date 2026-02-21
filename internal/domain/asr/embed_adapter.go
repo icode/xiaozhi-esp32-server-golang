@@ -4,6 +4,7 @@ package asr
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"xiaozhi-esp32-server-golang/constants"
 	"xiaozhi-esp32-server-golang/internal/data/audio"
@@ -161,9 +162,14 @@ func (a *AsrEmbedAdapter) emitFinalResult(ctx context.Context, resultChan chan<-
 		Mode:    embedMode,
 	}
 	if err != nil {
-		log.Warnf("embed 识别失败: %v", err)
-		result.Text = ""
-		result.Error = err
+		if errors.Is(err, core.ErrRecognitionFailed) {
+			log.Warnf("embed 识别失败(按空结果处理): %v", err)
+			result.Text = ""
+		} else {
+			log.Warnf("embed 识别失败: %v", err)
+			result.Text = ""
+			result.Error = err
+		}
 	}
 
 	select {
