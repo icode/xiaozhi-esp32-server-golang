@@ -80,23 +80,16 @@ func NewChatSession(clientState *ClientState, serverTransport *ServerTransport, 
 
 	// 如果启用声纹识别，创建声纹管理器
 	if clientState.IsSpeakerEnabled() {
-		// 优先读取 speaker_service（新配置），未配置时回退 voice_identify（旧配置）
-		baseURL := strings.TrimSpace(viper.GetString("speaker_service.url"))
-		if baseURL == "" {
-			baseURL = strings.TrimSpace(viper.GetString("voice_identify.base_url"))
-		}
-
-		serviceMode := strings.ToLower(strings.TrimSpace(viper.GetString("speaker_service.mode")))
-		if serviceMode == "" {
-			serviceMode = strings.ToLower(strings.TrimSpace(viper.GetString("voice_identify.service")))
-		}
+		// 声纹识别运行时配置
+		baseURL := strings.TrimSpace(viper.GetString("voice_identify.base_url"))
+		serviceMode := strings.ToLower(strings.TrimSpace(viper.GetString("voice_identify.mode")))
 
 		speakerConfig := map[string]interface{}{}
 		if baseURL != "" {
 			speakerConfig["base_url"] = baseURL
 		}
 		if serviceMode != "" {
-			speakerConfig["service"] = serviceMode
+			speakerConfig["mode"] = serviceMode
 		}
 		if viper.IsSet("voice_identify.threshold") {
 			speakerConfig["threshold"] = viper.GetFloat64("voice_identify.threshold")

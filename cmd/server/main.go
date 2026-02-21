@@ -215,12 +215,7 @@ func shouldInitAsrServerEmbed() bool {
 		}
 	}
 
-	// 新配置优先：speaker_service.mode
-	serviceMode := strings.ToLower(strings.TrimSpace(viper.GetString("speaker_service.mode")))
-	// 兼容旧配置：voice_identify.service
-	if serviceMode == "" {
-		serviceMode = strings.ToLower(strings.TrimSpace(viper.GetString("voice_identify.service")))
-	}
+	serviceMode := strings.ToLower(strings.TrimSpace(viper.GetString("voice_identify.mode")))
 
 	return serviceMode == "embed"
 }
