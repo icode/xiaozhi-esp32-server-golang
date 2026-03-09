@@ -33,6 +33,9 @@ xiaozhi-aio/
 
 ### Linux
 ```bash
+# ten_vad 运行时依赖
+sudo apt install -y libc++1 libc++abi1
+
 chmod +x xiaozhi_server
 LD_LIBRARY_PATH="$PWD/ten-vad/lib/Linux/x64:${LD_LIBRARY_PATH:-}" ./xiaozhi_server
 ```
