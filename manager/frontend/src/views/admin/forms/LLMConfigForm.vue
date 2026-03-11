@@ -347,7 +347,6 @@ function getJsonData() {
   const thinking = buildThinkingPayload(m)
   if (providerType === 'dify') {
     const config = {
-      type: 'dify',
       api_key: m.api_key,
       user_prefix: m.user_prefix
     }
@@ -356,7 +355,6 @@ function getJsonData() {
   }
   if (providerType === 'coze') {
     const config = {
-      type: 'coze',
       api_key: m.api_key,
       bot_id: m.bot_id,
       user_prefix: m.user_prefix,
@@ -367,7 +365,6 @@ function getJsonData() {
   }
 
   const config = {
-    type: providerType,
     model_name: m.model_name,
     api_key: m.api_key
   }
