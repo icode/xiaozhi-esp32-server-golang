@@ -3,6 +3,7 @@ package eino_llm
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -22,12 +23,13 @@ import (
 // EinoLLMProvider 基于Eino框架的LLM提供者
 // 直接使用Eino的ChatModel接口和类型，支持openai和ollama
 type EinoLLMProvider struct {
-	chatModel    model.ToolCallingChatModel
-	modelName    string
-	maxTokens    int
-	streamable   bool
-	config       map[string]interface{}
-	providerType string // "openai" 或 "ollama"
+	chatModel        model.ToolCallingChatModel
+	modelName        string
+	maxTokens        int
+	streamable       bool
+	config           map[string]interface{}
+	providerType     string // "openai" 或 "ollama"
+	reasoningTracker *reasoningContentTracker
 }
 
 // EinoConfig Eino LLM配置
@@ -89,6 +91,8 @@ func getHTTPClient() *http.Client {
 // NewEinoLLMProvider 创建新的Eino LLM提供者，根据type支持openai和ollama
 func NewEinoLLMProvider(config map[string]interface{}) (*EinoLLMProvider, error) {
 	//log.Debugf("NewEinoLLMProvider config: %+v", config)
+	tracker := &reasoningContentTracker{}
+	config[thinkingTrackerConfigKey] = tracker
 	parsedConfig, err := decodeOpenAICompatibleConfig(config)
 	if err != nil {
 		return nil, fmt.Errorf("解析LLM配置失败: %v", err)
@@ -133,15 +137,20 @@ func NewEinoLLMProvider(config map[string]interface{}) (*EinoLLMProvider, error)
 	}
 
 	provider := &EinoLLMProvider{
-		chatModel:    chatModel,
-		modelName:    modelName,
-		maxTokens:    maxTokens,
-		streamable:   streamable,
-		config:       config,
-		providerType: providerType,
+		chatModel:        chatModel,
+		modelName:        modelName,
+		maxTokens:        maxTokens,
+		streamable:       streamable,
+		config:           config,
+		providerType:     providerType,
+		reasoningTracker: tracker,
 	}
 
 	return provider, nil
+}
+
+func (p *EinoLLMProvider) HasReasoningContent() bool {
+	return p != nil && p.reasoningTracker != nil && p.reasoningTracker.HasReturned()
 }
 
 // createOpenAIChatModel 创建OpenAI的ChatModel实现
@@ -284,6 +293,9 @@ func (p *EinoLLMProvider) EinoResponseWithTools(ctx context.Context, sessionID s
 	var err error
 	go func() {
 		defer close(responseChan)
+		if p.reasoningTracker != nil {
+			p.reasoningTracker.Reset()
+		}
 
 		log.Infof("[Eino-LLM] 开始处理Eino工具请求 - SessionID: %s, tools: %+v", sessionID, tools)
 
@@ -339,6 +351,14 @@ func (p *EinoLLMProvider) EinoResponseWithTools(ctx context.Context, sessionID s
 						break
 					}
 					if err != nil {
+						if ctxErr := ctx.Err(); ctxErr != nil {
+							if errors.Is(ctxErr, context.Canceled) {
+								log.Debugf("流式响应已取消: %v", ctxErr)
+							} else {
+								log.Warnf("流式响应已结束: %v", ctxErr)
+							}
+							break
+						}
 						log.Errorf("接收流式响应失败: %v", err)
 						sendLLMError(responseChan, err)
 						break

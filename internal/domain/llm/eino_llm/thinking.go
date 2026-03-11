@@ -7,10 +7,13 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync/atomic"
 )
 
 const (
-	defaultThinkingEffort = "medium"
+	defaultThinkingEffort    = "medium"
+	reasoningContentMarker   = "\"reasoning_content\""
+	thinkingTrackerConfigKey = "__thinking_tracker"
 )
 
 type thinkingConfig struct {
@@ -92,15 +95,58 @@ type thinkingRoundTripper struct {
 	base     http.RoundTripper
 	provider string
 	thinking thinkingConfig
+	tracker  *reasoningContentTracker
+}
+
+type reasoningContentTracker struct {
+	returned atomic.Bool
+}
+
+func (t *reasoningContentTracker) MarkReturned() {
+	if t != nil {
+		t.returned.Store(true)
+	}
+}
+
+func (t *reasoningContentTracker) HasReturned() bool {
+	return t != nil && t.returned.Load()
+}
+
+func (t *reasoningContentTracker) Reset() {
+	if t != nil {
+		t.returned.Store(false)
+	}
+}
+
+type reasoningDetectReadCloser struct {
+	io.ReadCloser
+	tracker *reasoningContentTracker
+	tail    string
+}
+
+func (r *reasoningDetectReadCloser) Read(p []byte) (int, error) {
+	n, err := r.ReadCloser.Read(p)
+	if n > 0 && r.tracker != nil && !r.tracker.HasReturned() {
+		chunk := r.tail + string(p[:n])
+		if strings.Contains(chunk, reasoningContentMarker) {
+			r.tracker.MarkReturned()
+		}
+		if len(chunk) > len(reasoningContentMarker) {
+			r.tail = chunk[len(chunk)-len(reasoningContentMarker):]
+		} else {
+			r.tail = chunk
+		}
+	}
+	return n, err
 }
 
 func (t *thinkingRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	if req == nil || req.Body == nil || !t.thinking.enabled() {
-		return t.base.RoundTrip(req)
+		return t.roundTripAndWrap(req)
 	}
 
 	if req.Method != http.MethodPost {
-		return t.base.RoundTrip(req)
+		return t.roundTripAndWrap(req)
 	}
 
 	bodyBytes, err := io.ReadAll(req.Body)
@@ -110,16 +156,16 @@ func (t *thinkingRoundTripper) RoundTrip(req *http.Request) (*http.Response, err
 	_ = req.Body.Close()
 
 	if len(bytes.TrimSpace(bodyBytes)) == 0 {
-		return t.base.RoundTrip(cloneRequestWithBody(req, bodyBytes))
+		return t.roundTripAndWrap(cloneRequestWithBody(req, bodyBytes))
 	}
 
 	var payload map[string]interface{}
 	if err := json.Unmarshal(bodyBytes, &payload); err != nil {
-		return t.base.RoundTrip(cloneRequestWithBody(req, bodyBytes))
+		return t.roundTripAndWrap(cloneRequestWithBody(req, bodyBytes))
 	}
 
 	if !injectThinkingPayload(payload, t.provider, t.thinking) {
-		return t.base.RoundTrip(cloneRequestWithBody(req, bodyBytes))
+		return t.roundTripAndWrap(cloneRequestWithBody(req, bodyBytes))
 	}
 
 	newBody, err := json.Marshal(payload)
@@ -127,7 +173,19 @@ func (t *thinkingRoundTripper) RoundTrip(req *http.Request) (*http.Response, err
 		return nil, err
 	}
 
-	return t.base.RoundTrip(cloneRequestWithBody(req, newBody))
+	return t.roundTripAndWrap(cloneRequestWithBody(req, newBody))
+}
+
+func (t *thinkingRoundTripper) roundTripAndWrap(req *http.Request) (*http.Response, error) {
+	resp, err := t.base.RoundTrip(req)
+	if err != nil || resp == nil || resp.Body == nil || t.tracker == nil {
+		return resp, err
+	}
+	resp.Body = &reasoningDetectReadCloser{
+		ReadCloser: resp.Body,
+		tracker:    t.tracker,
+	}
+	return resp, nil
 }
 
 func cloneRequestWithBody(req *http.Request, body []byte) *http.Request {
@@ -172,6 +230,11 @@ func buildThinkingHTTPClient(config map[string]interface{}, base *http.Client) *
 		return base
 	}
 
+	var tracker *reasoningContentTracker
+	if rawTracker, ok := config[thinkingTrackerConfigKey].(*reasoningContentTracker); ok {
+		tracker = rawTracker
+	}
+
 	cloned := *base
 	transport := base.Transport
 	if transport == nil {
@@ -181,6 +244,7 @@ func buildThinkingHTTPClient(config map[string]interface{}, base *http.Client) *
 		base:     transport,
 		provider: provider,
 		thinking: thinking,
+		tracker:  tracker,
 	}
 	return &cloned
 }

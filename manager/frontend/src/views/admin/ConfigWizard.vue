@@ -923,7 +923,10 @@ function prevStep() {
 
 function formatTestMessage(result) {
   const base = result.message || ''
-  return result.first_packet_ms != null ? `${base} ${result.first_packet_ms}ms` : base
+  const suffix = []
+  if (result.first_packet_ms != null) suffix.push(`${result.first_packet_ms}ms`)
+  if (result.reasoning_content_returned) suffix.push('思考已返回')
+  return suffix.length ? `${base} ${suffix.join(' · ')}` : base
 }
 
 function formatDraftTestLabel(name, configId) {

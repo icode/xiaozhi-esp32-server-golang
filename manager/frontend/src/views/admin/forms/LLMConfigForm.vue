@@ -9,8 +9,8 @@
         <el-option label="智谱AI" value="zhipu" />
         <el-option label="阿里云" value="aliyun" />
         <el-option label="豆包" value="doubao" />
-        <el-option label="SiliconFlow" value="siliconflow" />
-        <el-option label="DeepSeek" value="deepseek" />
+        <el-option label="硅基流动" value="siliconflow" />
+        <el-option label="DeepSeek（深度求索）" value="deepseek" />
         <el-option label="Dify" value="dify" />
         <el-option label="Coze" value="coze" />
       </el-select>
