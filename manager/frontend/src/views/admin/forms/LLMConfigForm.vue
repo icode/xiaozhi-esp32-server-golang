@@ -50,15 +50,15 @@
       />
     </el-form-item>
 
-    <el-form-item label="API密钥" prop="api_key">
+    <el-form-item label="API密钥" prop="api_key" :required="apiKeyRequired">
       <el-input v-model="model.api_key" type="password" placeholder="请输入API密钥" show-password />
     </el-form-item>
 
-    <el-form-item v-if="showBaseURL" label="基础URL" prop="base_url">
+    <el-form-item v-if="showBaseURL" label="基础URL" prop="base_url" required>
       <el-input v-model="model.base_url" placeholder="请输入基础URL" style="width: 100%" />
     </el-form-item>
 
-    <el-form-item v-if="isCoze" label="Bot ID" prop="bot_id">
+    <el-form-item v-if="isCoze" label="Bot ID" prop="bot_id" required>
       <el-input v-model="model.bot_id" placeholder="请输入 Coze Bot ID" />
     </el-form-item>
 
@@ -70,7 +70,7 @@
       <el-input v-model="model.connector_id" placeholder="可选，默认 1024" />
     </el-form-item>
 
-    <el-form-item v-if="isOpenAIOrOllama && requestConfig.allowMaxTokens" label="max_tokens" prop="max_tokens">
+    <el-form-item v-if="isOpenAIOrOllama && requestConfig.allowMaxTokens" label="max_tokens" prop="max_tokens" required>
       <el-input-number v-model="model.max_tokens" :min="1" :max="100000" placeholder="max_tokens" style="width: 100%" />
     </el-form-item>
 
@@ -173,9 +173,11 @@ const formRef = ref()
 const resolvedProvider = computed(() => resolveLLMProvider(props.model?.provider, props.model?.type))
 const effectiveType = computed(() => getProviderFixedType(resolvedProvider.value))
 const isOpenAIOrOllama = computed(() => effectiveType.value === 'openai' || effectiveType.value === 'ollama')
+const isOllama = computed(() => effectiveType.value === 'ollama')
 const isDify = computed(() => effectiveType.value === 'dify')
 const isCoze = computed(() => effectiveType.value === 'coze')
 const showBaseURL = computed(() => isProviderBaseURLEditable(resolvedProvider.value))
+const apiKeyRequired = computed(() => !isOllama.value)
 
 const defaultThinkingMode = 'default'
 

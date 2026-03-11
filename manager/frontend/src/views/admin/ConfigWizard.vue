@@ -359,7 +359,17 @@ const llmFormRules = {
     },
     trigger: 'change'
   }],
-  api_key: [{ required: true, message: '请输入API密钥', trigger: 'blur' }],
+  api_key: [{
+    validator: (_, value, callback) => {
+      const provider = resolveLLMProvider(llmForm.provider, llmForm.type)
+      if (getProviderFixedType(provider) !== 'ollama' && !value) {
+        callback(new Error('请输入API密钥'))
+        return
+      }
+      callback()
+    },
+    trigger: 'blur'
+  }],
   base_url: [{
     validator: (_, value, callback) => {
       const provider = resolveLLMProvider(llmForm.provider, llmForm.type)
