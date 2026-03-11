@@ -89,28 +89,32 @@ func getHTTPClient() *http.Client {
 // NewEinoLLMProvider 创建新的Eino LLM提供者，根据type支持openai和ollama
 func NewEinoLLMProvider(config map[string]interface{}) (*EinoLLMProvider, error) {
 	//log.Debugf("NewEinoLLMProvider config: %+v", config)
-	providerType, _ := config["type"].(string)
+	parsedConfig, err := decodeOpenAICompatibleConfig(config)
+	if err != nil {
+		return nil, fmt.Errorf("解析LLM配置失败: %v", err)
+	}
+
+	providerType := parsedConfig.Type
 	if providerType == "" {
 		return nil, fmt.Errorf("type不能为空，必须是 'openai' 或 'ollama'")
 	}
 
-	modelName, _ := config["model_name"].(string)
+	modelName := parsedConfig.ModelName
 	if modelName == "" {
 		return nil, fmt.Errorf("model_name不能为空")
 	}
 
 	maxTokens := 500
-	if mt, ok := config["max_tokens"].(int); ok {
-		maxTokens = mt
+	if parsedConfig.MaxTokens != nil {
+		maxTokens = *parsedConfig.MaxTokens
 	}
 
 	streamable := true
-	if s, ok := config["streamable"].(bool); ok {
-		streamable = s
+	if parsedConfig.Streamable != nil {
+		streamable = *parsedConfig.Streamable
 	}
 
 	var chatModel model.ToolCallingChatModel
-	var err error
 
 	// 根据类型创建不同的ChatModel实现
 	switch providerType {
@@ -144,27 +148,44 @@ func NewEinoLLMProvider(config map[string]interface{}) (*EinoLLMProvider, error)
 func createOpenAIChatModel(config map[string]interface{}) (model.ToolCallingChatModel, error) {
 	ctx := context.Background()
 
-	modelName, _ := config["model_name"].(string)
+	parsedConfig, err := decodeOpenAICompatibleConfig(config)
+	if err != nil {
+		return nil, fmt.Errorf("解析OpenAI兼容配置失败: %v", err)
+	}
+
+	modelName := parsedConfig.ModelName
 	if modelName == "" {
 		modelName = "gpt-3.5-turbo"
 	}
 
-	apiKey, _ := config["api_key"].(string)
+	apiKey := parsedConfig.APIKey
 	if apiKey == "" {
 		apiKey = os.Getenv("OPENAI_API_KEY")
 	}
 
-	baseURL, _ := config["base_url"].(string)
+	httpClient := buildThinkingHTTPClient(config, getHTTPClient())
 
 	// 创建OpenAI ChatModel配置
 	openaiConfig := &openai.ChatModelConfig{
 		Model:      modelName,
 		APIKey:     apiKey,
-		HTTPClient: getHTTPClient(),
+		HTTPClient: httpClient,
 	}
 
-	if baseURL != "" {
-		openaiConfig.BaseURL = baseURL
+	if parsedConfig.BaseURL != "" {
+		openaiConfig.BaseURL = parsedConfig.BaseURL
+	}
+	if parsedConfig.APIVersion != "" {
+		openaiConfig.APIVersion = parsedConfig.APIVersion
+	}
+	if parsedConfig.MaxTokens != nil && *parsedConfig.MaxTokens > 0 {
+		openaiConfig.MaxTokens = parsedConfig.MaxTokens
+	}
+	if parsedConfig.Temperature != nil {
+		openaiConfig.Temperature = parsedConfig.Temperature
+	}
+	if parsedConfig.TopP != nil {
+		openaiConfig.TopP = parsedConfig.TopP
 	}
 
 	log.Debugf("openaiConfig: %+v", openaiConfig)

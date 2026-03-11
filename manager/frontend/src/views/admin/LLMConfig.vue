@@ -112,6 +112,7 @@ import { Plus } from '@element-plus/icons-vue'
 import api from '../../utils/api'
 import { testSingleConfig, testWithData, parseJsonData } from '../../utils/configTest'
 import LLMConfigForm from './forms/LLMConfigForm.vue'
+import { getProviderFixedType, isProviderBaseURLEditable, resolveLLMProvider } from './forms/llmCatalog'
 
 const configs = ref([])
 const testingId = ref(null)
@@ -137,6 +138,10 @@ const form = reactive({
   max_tokens: 4000,
   temperature: 0.7,
   top_p: 0.9,
+  thinking_mode: 'default',
+  thinking_budget_tokens: null,
+  thinking_effort: 'medium',
+  thinking_clear_thinking: 'default',
   bot_id: '',
   user_prefix: '',
   connector_id: '1024'
@@ -145,22 +150,28 @@ const form = reactive({
 const rules = {
   name: [{ required: true, message: '请输入配置名称', trigger: 'blur' }],
   config_id: [{ required: true, message: '请输入配置ID', trigger: 'blur' }],
-  provider: [{ required: false, message: '请选择提供商', trigger: 'change' }],
-  type: [{ required: true, message: '请选择模型类型', trigger: 'change' }],
+  provider: [{ required: true, message: '请选择提供商', trigger: 'change' }],
   model_name: [{
+    required: true,
+    message: '请输入模型名称',
+    trigger: 'change'
+  }, {
     validator: (_, value, callback) => {
-      if ((form.type === 'openai' || form.type === 'ollama') && !value) {
+      const provider = resolveLLMProvider(form.provider, form.type)
+      const providerType = getProviderFixedType(provider)
+      if ((providerType === 'openai' || providerType === 'ollama') && !value) {
         callback(new Error('请输入模型名称'))
         return
       }
       callback()
     },
-    trigger: 'blur'
+    trigger: 'change'
   }],
   api_key: [{ required: true, message: '请输入API密钥', trigger: 'blur' }],
   base_url: [{
     validator: (_, value, callback) => {
-      if (form.type !== 'coze' && !value) {
+      const provider = resolveLLMProvider(form.provider, form.type)
+      if (isProviderBaseURLEditable(provider) && !value) {
         callback(new Error('请输入基础URL'))
         return
       }
@@ -170,7 +181,9 @@ const rules = {
   }],
   max_tokens: [{
     validator: (_, value, callback) => {
-      if ((form.type === 'openai' || form.type === 'ollama') && (!value || Number(value) < 1 || Number(value) > 100000)) {
+      const provider = resolveLLMProvider(form.provider, form.type)
+      const providerType = getProviderFixedType(provider)
+      if ((providerType === 'openai' || providerType === 'ollama') && (!value || Number(value) < 1 || Number(value) > 100000)) {
         callback(new Error('max_tokens必须在1-100000之间'))
         return
       }
@@ -180,7 +193,8 @@ const rules = {
   }],
   bot_id: [{
     validator: (_, value, callback) => {
-      if (form.type === 'coze' && !value) {
+      const provider = resolveLLMProvider(form.provider, form.type)
+      if (getProviderFixedType(provider) === 'coze' && !value) {
         callback(new Error('请输入Coze Bot ID'))
         return
       }
@@ -215,7 +229,9 @@ const editConfig = (config) => {
   // 解析配置JSON并填充到对应字段
   try {
     const configObj = JSON.parse(config.json_data || '{}')
-    const detectedType = configObj.type || (config.provider === 'coze' ? 'coze' : (config.provider === 'dify' ? 'dify' : 'openai'))
+    const detectedProvider = resolveLLMProvider(config.provider, configObj.type)
+    const detectedType = getProviderFixedType(detectedProvider)
+    form.provider = detectedProvider
     form.type = detectedType
     form.model_name = configObj.model_name || (detectedType === 'coze' ? 'coze' : (detectedType === 'dify' ? 'dify' : ''))
     form.api_key = configObj.api_key || ''
@@ -223,6 +239,10 @@ const editConfig = (config) => {
     form.max_tokens = configObj.max_tokens || 4000
     form.temperature = configObj.temperature || 0.7
     form.top_p = configObj.top_p || 0.9
+    form.thinking_mode = configObj.thinking?.mode || 'default'
+    form.thinking_budget_tokens = configObj.thinking?.budget_tokens !== undefined ? Number(configObj.thinking.budget_tokens) || null : null
+    form.thinking_effort = configObj.thinking?.effort || 'medium'
+    form.thinking_clear_thinking = configObj.thinking?.clear_thinking !== undefined ? configObj.thinking.clear_thinking : 'default'
     form.bot_id = configObj.bot_id || ''
     form.user_prefix = configObj.user_prefix || ''
     form.connector_id = configObj.connector_id || '1024'
@@ -328,6 +348,10 @@ function formatTestMessage(result) {
   return result.first_packet_ms != null ? `${base} ${result.first_packet_ms}ms` : base
 }
 
+function formatDraftTestLabel(name, configId) {
+  return name?.trim() || configId?.trim() || '当前配置'
+}
+
 const testConfig = async (row, type) => {
   testingId.value = row.config_id
   try {
@@ -393,11 +417,12 @@ const testCurrentConfig = async () => {
   }
   testingCurrent.value = true
   try {
-    const result = await testWithData('llm', { [configId]: payload })
+    const result = await testWithData('llm', { provider: configId, [configId]: payload })
+    const label = formatDraftTestLabel(form.name, configId)
     if (result.ok) {
-      ElMessage.success(formatTestMessage(result) || '测试通过')
+      ElMessage.success(`${label}：${formatTestMessage(result) || '测试通过'}`)
     } else {
-      ElMessage.warning(result.message || '测试未通过')
+      ElMessage.warning(`${label}：${result.message || '测试未通过'}`)
     }
   } catch (err) {
     ElMessage.error(err.response?.data?.error || '测试请求失败')
@@ -438,6 +463,10 @@ const resetForm = () => {
   form.max_tokens = 4000
   form.temperature = 0.7
   form.top_p = 0.9
+  form.thinking_mode = 'default'
+  form.thinking_budget_tokens = null
+  form.thinking_effort = 'medium'
+  form.thinking_clear_thinking = 'default'
   form.bot_id = ''
   form.user_prefix = ''
   form.connector_id = '1024'
