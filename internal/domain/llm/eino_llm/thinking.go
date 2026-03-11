@@ -94,6 +94,7 @@ func normalizeThinkingConfig(raw *thinkingConfig) *thinkingConfig {
 type thinkingRoundTripper struct {
 	base     http.RoundTripper
 	provider string
+	model    string
 	thinking thinkingConfig
 	tracker  *reasoningContentTracker
 }
@@ -141,7 +142,7 @@ func (r *reasoningDetectReadCloser) Read(p []byte) (int, error) {
 }
 
 func (t *thinkingRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
-	if req == nil || req.Body == nil || !t.thinking.enabled() {
+	if req == nil || req.Body == nil || !t.needsPayloadRewrite() {
 		return t.roundTripAndWrap(req)
 	}
 
@@ -164,7 +165,16 @@ func (t *thinkingRoundTripper) RoundTrip(req *http.Request) (*http.Response, err
 		return t.roundTripAndWrap(cloneRequestWithBody(req, bodyBytes))
 	}
 
-	if !injectThinkingPayload(payload, t.provider, t.thinking) {
+	rewritten := false
+	if shouldUseMaxCompletionTokens(t.provider, resolvePayloadModel(payload, t.model)) {
+		rewritten = rewriteMaxTokensPayload(payload) || rewritten
+	}
+
+	if injectThinkingPayload(payload, t.provider, t.thinking) {
+		rewritten = true
+	}
+
+	if !rewritten {
 		return t.roundTripAndWrap(cloneRequestWithBody(req, bodyBytes))
 	}
 
@@ -174,6 +184,13 @@ func (t *thinkingRoundTripper) RoundTrip(req *http.Request) (*http.Response, err
 	}
 
 	return t.roundTripAndWrap(cloneRequestWithBody(req, newBody))
+}
+
+func (t *thinkingRoundTripper) needsPayloadRewrite() bool {
+	if t == nil {
+		return false
+	}
+	return t.thinking.enabled() || shouldUseMaxCompletionTokens(t.provider, t.model)
 }
 
 func (t *thinkingRoundTripper) roundTripAndWrap(req *http.Request) (*http.Response, error) {
@@ -243,10 +260,54 @@ func buildThinkingHTTPClient(config map[string]interface{}, base *http.Client) *
 	cloned.Transport = &thinkingRoundTripper{
 		base:     transport,
 		provider: provider,
+		model:    parsed.ModelName,
 		thinking: thinking,
 		tracker:  tracker,
 	}
 	return &cloned
+}
+
+func resolvePayloadModel(payload map[string]interface{}, fallback string) string {
+	if payload != nil {
+		if modelName, ok := payload["model"].(string); ok {
+			modelName = strings.TrimSpace(modelName)
+			if modelName != "" {
+				return modelName
+			}
+		}
+	}
+	return strings.TrimSpace(fallback)
+}
+
+func shouldUseMaxCompletionTokens(provider, modelName string) bool {
+	if !isOneOf(provider, "openai", "azure") {
+		return false
+	}
+
+	modelName = strings.ToLower(strings.TrimSpace(modelName))
+	return strings.HasPrefix(modelName, "o1") ||
+		strings.HasPrefix(modelName, "o3") ||
+		strings.HasPrefix(modelName, "o4")
+}
+
+func rewriteMaxTokensPayload(payload map[string]interface{}) bool {
+	if payload == nil {
+		return false
+	}
+
+	if _, exists := payload["max_completion_tokens"]; exists {
+		delete(payload, "max_tokens")
+		return true
+	}
+
+	maxTokens, exists := payload["max_tokens"]
+	if !exists {
+		return false
+	}
+
+	payload["max_completion_tokens"] = maxTokens
+	delete(payload, "max_tokens")
+	return true
 }
 
 func injectThinkingPayload(payload map[string]interface{}, provider string, thinking thinkingConfig) bool {

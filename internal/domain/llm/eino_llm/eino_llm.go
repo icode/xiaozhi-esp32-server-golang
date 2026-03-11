@@ -173,6 +173,7 @@ func createOpenAIChatModel(config map[string]interface{}) (model.ToolCallingChat
 	}
 
 	httpClient := buildThinkingHTTPClient(config, getHTTPClient())
+	useMaxCompletionTokens := shouldUseMaxCompletionTokens(parsedConfig.Provider, modelName)
 
 	// 创建OpenAI ChatModel配置
 	openaiConfig := &openai.ChatModelConfig{
@@ -187,7 +188,7 @@ func createOpenAIChatModel(config map[string]interface{}) (model.ToolCallingChat
 	if parsedConfig.APIVersion != "" {
 		openaiConfig.APIVersion = parsedConfig.APIVersion
 	}
-	if parsedConfig.MaxTokens != nil && *parsedConfig.MaxTokens > 0 {
+	if !useMaxCompletionTokens && parsedConfig.MaxTokens != nil && *parsedConfig.MaxTokens > 0 {
 		openaiConfig.MaxTokens = parsedConfig.MaxTokens
 	}
 	if parsedConfig.Temperature != nil {
@@ -312,11 +313,11 @@ func (p *EinoLLMProvider) EinoResponseWithTools(ctx context.Context, sessionID s
 		if p.streamable {
 			log.Debugf("EinoLLMProvider.EinoResponseWithTools() streamable: %t", p.streamable)
 			// 直接使用Eino的Stream方法
-			streamReader, err := p.chatModel.Stream(ctx, messages, model.WithMaxTokens(p.maxTokens))
+			streamReader, err := p.chatModel.Stream(ctx, messages, p.buildModelCallOptions()...)
 			if err != nil {
 				log.Errorf("Eino工具流式调用失败: %v", err)
 				// 对于mock实现，如果Stream失败，回退到Generate
-				message, genErr := p.chatModel.Generate(ctx, messages, model.WithMaxTokens(p.maxTokens))
+				message, genErr := p.chatModel.Generate(ctx, messages, p.buildModelCallOptions()...)
 				if genErr != nil {
 					log.Errorf("Eino工具生成响应失败: %v", genErr)
 					sendLLMError(responseChan, genErr)
@@ -408,7 +409,7 @@ func (p *EinoLLMProvider) EinoResponseWithTools(ctx context.Context, sessionID s
 			}
 		} else {
 			// 直接使用Eino的Generate方法
-			message, err := p.chatModel.Generate(ctx, messages, model.WithMaxTokens(p.maxTokens))
+			message, err := p.chatModel.Generate(ctx, messages, p.buildModelCallOptions()...)
 			if err != nil {
 				log.Errorf("Eino工具生成响应失败: %v", err)
 				sendLLMError(responseChan, err)
@@ -424,6 +425,25 @@ func (p *EinoLLMProvider) EinoResponseWithTools(ctx context.Context, sessionID s
 	}()
 
 	return responseChan
+}
+
+func (p *EinoLLMProvider) buildModelCallOptions() []model.Option {
+	if p == nil || p.maxTokens <= 0 {
+		return nil
+	}
+
+	provider := ""
+	if p.config != nil {
+		if rawProvider, ok := p.config["provider"].(string); ok {
+			provider = rawProvider
+		}
+	}
+
+	if shouldUseMaxCompletionTokens(provider, p.modelName) {
+		return nil
+	}
+
+	return []model.Option{model.WithMaxTokens(p.maxTokens)}
 }
 
 // isValidJSON 检查字符串是否是有效的JSON
