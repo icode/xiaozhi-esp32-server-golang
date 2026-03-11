@@ -239,7 +239,9 @@ func RunConfigTest(data map[string]interface{}, testText string) (vadResult, asr
 				log.Debugf("[config_test] LLM config_id=%s 配置格式无效", configID)
 				continue
 			}
-			wrapper, err := pool.Acquire[llm.LLMProvider]("llm", configID, cfg)
+			testCfg := cloneConfigMap(cfg)
+			testCfg["__enable_reasoning_content_detection"] = true
+			wrapper, err := pool.Acquire[llm.LLMProvider]("llm", configID, testCfg)
 			if err != nil {
 				llmResult[configID] = map[string]interface{}{"ok": false, "message": err.Error()}
 				log.Debugf("[config_test] LLM config_id=%s Acquire 失败: %v", configID, err)
@@ -351,6 +353,17 @@ func RunConfigTest(data map[string]interface{}, testText string) (vadResult, asr
 	}
 
 	return vadResult, asrResult, llmResult, ttsResult
+}
+
+func cloneConfigMap(src map[string]interface{}) map[string]interface{} {
+	if src == nil {
+		return map[string]interface{}{}
+	}
+	dst := make(map[string]interface{}, len(src))
+	for key, value := range src {
+		dst[key] = value
+	}
+	return dst
 }
 
 func min(a, b int) int {

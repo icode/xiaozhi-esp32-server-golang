@@ -91,8 +91,11 @@ func getHTTPClient() *http.Client {
 // NewEinoLLMProvider 创建新的Eino LLM提供者，根据type支持openai和ollama
 func NewEinoLLMProvider(config map[string]interface{}) (*EinoLLMProvider, error) {
 	//log.Debugf("NewEinoLLMProvider config: %+v", config)
-	tracker := &reasoningContentTracker{}
-	config[thinkingTrackerConfigKey] = tracker
+	var tracker *reasoningContentTracker
+	if enabled, _ := config[reasoningDetectConfigKey].(bool); enabled {
+		tracker = &reasoningContentTracker{}
+		config[reasoningTrackerConfigKey] = tracker
+	}
 	parsedConfig, err := decodeOpenAICompatibleConfig(config)
 	if err != nil {
 		return nil, fmt.Errorf("解析LLM配置失败: %v", err)
@@ -335,12 +338,17 @@ func (p *EinoLLMProvider) EinoResponseWithTools(ctx context.Context, sessionID s
 				var currentToolCall *schema.ToolCall
 				var toolCallBuffer string
 				var isToolCallComplete bool
+				var streamChunkCount int
 
 				// 处理流式响应
 				for {
 					message, err := streamReader.Recv()
 					//log.Debugf("streamReader.Recv() message: %+v", message)
 					if err == io.EOF {
+						if streamChunkCount == 0 {
+							sendLLMError(responseChan, errors.New("流式响应为空"))
+							break
+						}
 						// 如果有未完成的工具调用，发送最后一次
 						if currentToolCall != nil {
 							completeMessage := &schema.Message{
@@ -366,6 +374,7 @@ func (p *EinoLLMProvider) EinoResponseWithTools(ctx context.Context, sessionID s
 					}
 
 					if message != nil {
+						streamChunkCount++
 						// 检查是否是工具调用的开始
 						if len(message.ToolCalls) > 0 {
 							toolCall := message.ToolCalls[0]
@@ -406,6 +415,8 @@ func (p *EinoLLMProvider) EinoResponseWithTools(ctx context.Context, sessionID s
 						}
 					}
 				}
+			} else {
+				sendLLMError(responseChan, errors.New("流式响应为空"))
 			}
 		} else {
 			// 直接使用Eino的Generate方法

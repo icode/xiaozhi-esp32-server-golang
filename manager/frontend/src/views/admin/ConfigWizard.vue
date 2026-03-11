@@ -925,7 +925,7 @@ function formatTestMessage(result) {
   const base = result.message || ''
   const suffix = []
   if (result.first_packet_ms != null) suffix.push(`${result.first_packet_ms}ms`)
-  if (result.reasoning_content_returned) suffix.push('思考已返回')
+  if (result.reasoning_content_returned) suffix.push('检测到上游返回思考内容')
   return suffix.length ? `${base} ${suffix.join(' · ')}` : base
 }
 

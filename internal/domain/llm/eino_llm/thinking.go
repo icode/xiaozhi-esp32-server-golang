@@ -11,9 +11,11 @@ import (
 )
 
 const (
-	defaultThinkingEffort    = "medium"
-	reasoningContentMarker   = "\"reasoning_content\""
-	thinkingTrackerConfigKey = "__thinking_tracker"
+	defaultThinkingEffort     = "medium"
+	reasoningContentMarker    = "\"reasoning_content\""
+	reasoningTrackerConfigKey = "__reasoning_content_tracker"
+	reasoningDetectConfigKey  = "__enable_reasoning_content_detection"
+	reasoningDetectTailSize   = 1024
 )
 
 type thinkingConfig struct {
@@ -129,16 +131,87 @@ func (r *reasoningDetectReadCloser) Read(p []byte) (int, error) {
 	n, err := r.ReadCloser.Read(p)
 	if n > 0 && r.tracker != nil && !r.tracker.HasReturned() {
 		chunk := r.tail + string(p[:n])
-		if strings.Contains(chunk, reasoningContentMarker) {
+		if content, ok := extractNonEmptyReasoningContent(chunk); ok {
 			r.tracker.MarkReturned()
+			_ = content
 		}
-		if len(chunk) > len(reasoningContentMarker) {
-			r.tail = chunk[len(chunk)-len(reasoningContentMarker):]
+		if len(chunk) > reasoningDetectTailSize {
+			r.tail = chunk[len(chunk)-reasoningDetectTailSize:]
 		} else {
 			r.tail = chunk
 		}
 	}
 	return n, err
+}
+
+func extractNonEmptyReasoningContent(chunk string) (string, bool) {
+	searchFrom := 0
+	for {
+		idx := strings.Index(chunk[searchFrom:], reasoningContentMarker)
+		if idx < 0 {
+			return "", false
+		}
+		idx += searchFrom + len(reasoningContentMarker)
+
+		pos := skipJSONWhitespace(chunk, idx)
+		if pos >= len(chunk) || chunk[pos] != ':' {
+			return "", false
+		}
+
+		pos = skipJSONWhitespace(chunk, pos+1)
+		if pos >= len(chunk) {
+			return "", false
+		}
+
+		if chunk[pos] != '"' {
+			searchFrom = pos
+			continue
+		}
+
+		content, complete := parseJSONStringValue(chunk, pos)
+		if !complete {
+			return "", false
+		}
+		if strings.TrimSpace(content) != "" {
+			return content, true
+		}
+		searchFrom = pos + 1
+	}
+}
+
+func skipJSONWhitespace(s string, pos int) int {
+	for pos < len(s) {
+		switch s[pos] {
+		case ' ', '\n', '\r', '\t':
+			pos++
+		default:
+			return pos
+		}
+	}
+	return pos
+}
+
+func parseJSONStringValue(s string, start int) (string, bool) {
+	if start >= len(s) || s[start] != '"' {
+		return "", false
+	}
+
+	escaped := false
+	for i := start + 1; i < len(s); i++ {
+		ch := s[i]
+		if escaped {
+			escaped = false
+			continue
+		}
+		if ch == '\\' {
+			escaped = true
+			continue
+		}
+		if ch == '"' {
+			return s[start+1 : i], true
+		}
+	}
+	return "", false
 }
 
 func (t *thinkingRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
@@ -248,7 +321,7 @@ func buildThinkingHTTPClient(config map[string]interface{}, base *http.Client) *
 	}
 
 	var tracker *reasoningContentTracker
-	if rawTracker, ok := config[thinkingTrackerConfigKey].(*reasoningContentTracker); ok {
+	if rawTracker, ok := config[reasoningTrackerConfigKey].(*reasoningContentTracker); ok {
 		tracker = rawTracker
 	}
 
