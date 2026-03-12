@@ -354,11 +354,6 @@ func (s *ClientState) getLLMProvider() (llm.LLMProvider, error) {
 	if providerName == "" {
 		providerName = "openai"
 	}
-	_, ok := llmConfig.Config["type"]
-	if !ok {
-		log.Errorf("getLLMProvider err: not found llm type: %+v", llmConfig)
-		return nil, fmt.Errorf("llm config type not found")
-	}
 	llmProvider, err := llm.GetLLMProvider(providerName, llmConfig.Config)
 	if err != nil {
 		return nil, fmt.Errorf("创建 LLM 提供者失败: %v", err)
