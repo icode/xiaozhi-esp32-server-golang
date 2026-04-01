@@ -164,18 +164,17 @@ const form = reactive({
   doubao: {
     appid: '6886011847',
     access_token: 'access_token',
-    cluster: 'volcano_tts',
+    model: 'seed-tts-2.0-standard',
     voice: 'BV001_streaming',
-    api_url: 'https://openspeech.bytedance.com/api/v1/tts',
-    authorization: 'Bearer;'
+    api_url: 'https://openspeech.bytedance.com/api/v3/tts/unidirectional'
   },
   doubao_ws: {
     appid: '6886011847',
     access_token: 'access_token',
-    cluster: 'volcano_tts',
-    voice: 'zh_female_wanwanxiaohe_moon_bigtts',
-    ws_host: 'openspeech.bytedance.com',
-    use_stream: true
+    model: 'seed-tts-2.0-standard',
+    resource_id: '',
+    voice: '',
+    ws_url: 'wss://openspeech.bytedance.com/api/v3/tts/unidirectional/stream'
   },
   edge: {
     voice: 'zh-CN-XiaoxiaoNeural',
@@ -286,15 +285,15 @@ const rules = {
   // 豆包 TTS 验证规则
   'doubao.appid': [{ required: true, message: '请输入应用ID', trigger: 'blur' }],
   'doubao.access_token': [{ required: true, message: '请输入访问令牌', trigger: 'blur' }],
-  'doubao.cluster': [{ required: true, message: '请输入集群', trigger: 'blur' }],
+  'doubao.model': [{ required: true, message: '请选择模型', trigger: 'change' }],
   'doubao.voice': [{ required: true, message: '请输入音色', trigger: 'blur' }],
   'doubao.api_url': [{ required: true, message: '请输入API URL', trigger: 'blur' }],
   // 豆包 WebSocket 验证规则
   'doubao_ws.appid': [{ required: true, message: '请输入应用ID', trigger: 'blur' }],
   'doubao_ws.access_token': [{ required: true, message: '请输入访问令牌', trigger: 'blur' }],
-  'doubao_ws.cluster': [{ required: true, message: '请输入集群', trigger: 'blur' }],
+  'doubao_ws.model': [{ required: true, message: '请选择模型', trigger: 'change' }],
   'doubao_ws.voice': [{ required: true, message: '请输入音色', trigger: 'blur' }],
-  'doubao_ws.ws_host': [{ required: true, message: '请输入WebSocket主机', trigger: 'blur' }],
+  'doubao_ws.ws_url': [{ required: true, message: '请输入WebSocket URL', trigger: 'blur' }],
   // Edge TTS 验证规则
   'edge.voice': [{ required: true, message: '请输入音色', trigger: 'blur' }],
   'edge.rate': [{ required: true, message: '请输入语速', trigger: 'blur' }],
@@ -364,18 +363,17 @@ const editConfig = (config) => {
       case 'doubao':
         form.doubao.appid = configData.appid || ''
         form.doubao.access_token = configData.access_token || ''
-        form.doubao.cluster = configData.cluster || ''
+        form.doubao.model = configData.model || 'seed-tts-2.0-standard'
         form.doubao.voice = configData.voice || ''
-        form.doubao.api_url = configData.api_url || ''
-        form.doubao.authorization = configData.authorization || ''
+        form.doubao.api_url = configData.api_url || 'https://openspeech.bytedance.com/api/v3/tts/unidirectional'
         break
       case 'doubao_ws':
         form.doubao_ws.appid = configData.appid || ''
         form.doubao_ws.access_token = configData.access_token || ''
-        form.doubao_ws.cluster = configData.cluster || ''
+        form.doubao_ws.model = configData.model || 'seed-tts-2.0-standard'
+        form.doubao_ws.resource_id = configData.resource_id || ''
         form.doubao_ws.voice = configData.voice || ''
-        form.doubao_ws.ws_host = configData.ws_host || ''
-        form.doubao_ws.use_stream = configData.use_stream !== undefined ? configData.use_stream : true
+        form.doubao_ws.ws_url = configData.ws_url || (configData.ws_host ? `wss://${configData.ws_host}/api/v3/tts/unidirectional/stream` : 'wss://openspeech.bytedance.com/api/v3/tts/unidirectional/stream')
         break
       case 'edge':
         form.edge.voice = configData.voice || ''
@@ -713,18 +711,17 @@ const resetForm = () => {
     doubao: {
       appid: '6886011847',
       access_token: 'access_token',
-      cluster: 'volcano_tts',
+      model: 'seed-tts-2.0-standard',
       voice: 'BV001_streaming',
-      api_url: 'https://openspeech.bytedance.com/api/v1/tts',
-      authorization: 'Bearer;'
+      api_url: 'https://openspeech.bytedance.com/api/v3/tts/unidirectional'
     },
     doubao_ws: {
       appid: '6886011847',
       access_token: 'access_token',
-      cluster: 'volcano_tts',
-      voice: 'zh_female_wanwanxiaohe_moon_bigtts',
-      ws_host: 'openspeech.bytedance.com',
-      use_stream: true
+      model: 'seed-tts-2.0-standard',
+      resource_id: '',
+      voice: '',
+      ws_url: 'wss://openspeech.bytedance.com/api/v3/tts/unidirectional/stream'
     },
     edge: {
       voice: 'zh-CN-XiaoxiaoNeural',

@@ -79,6 +79,7 @@
           :voice-options="voiceOptions"
           :voice-loading="voiceLoading"
           class="wizard-form"
+          @request-voice-options="handleTtsVoiceOptionsRequest"
         />
       </template>
 
@@ -423,10 +424,10 @@ const ttsForm = reactive({
   doubao_ws: {
     appid: '',
     access_token: '',
-    cluster: 'volcano_tts',
-    voice: 'zh_female_wanwanxiaohe_moon_bigtts',
-    ws_host: 'openspeech.bytedance.com',
-    use_stream: true
+    model: 'seed-tts-2.0-standard',
+    resource_id: '',
+    voice: '',
+    ws_url: 'wss://openspeech.bytedance.com/api/v3/tts/unidirectional/stream'
   },
   edge: {
     voice: 'zh-CN-XiaoxiaoNeural',
@@ -528,7 +529,8 @@ const ttsFormRules = {
   provider: [{ required: true, message: '请选择提供商', trigger: 'change' }],
   'doubao_ws.appid': [{ required: true, message: '请输入应用ID', trigger: 'blur' }],
   'doubao_ws.access_token': [{ required: true, message: '请输入访问令牌', trigger: 'blur' }],
-  'doubao_ws.ws_host': [{ required: true, message: '请输入WebSocket主机', trigger: 'blur' }],
+  'doubao_ws.model': [{ required: true, message: '请选择模型', trigger: 'change' }],
+  'doubao_ws.ws_url': [{ required: true, message: '请输入WebSocket URL', trigger: 'blur' }],
   'xunfei.app_id': [{ required: true, message: '请输入应用ID', trigger: 'blur' }],
   'xunfei.api_key': [{ required: true, message: '请输入API Key', trigger: 'blur' }],
   'xunfei.api_secret': [{ required: true, message: '请输入API Secret', trigger: 'blur' }],
@@ -937,8 +939,11 @@ async function loadTtsIfExists() {
     const p = config.provider
     if (p === 'doubao_ws') {
       Object.assign(ttsForm.doubao_ws, data)
-      if (!String(ttsForm.doubao_ws.ws_host || '').trim()) {
-        ttsForm.doubao_ws.ws_host = 'openspeech.bytedance.com'
+      if (!String(ttsForm.doubao_ws.ws_url || '').trim()) {
+        ttsForm.doubao_ws.ws_url = data.ws_host ? `wss://${data.ws_host}/api/v3/tts/unidirectional/stream` : 'wss://openspeech.bytedance.com/api/v3/tts/unidirectional/stream'
+      }
+      if (!String(ttsForm.doubao_ws.resource_id || '').trim()) {
+        ttsForm.doubao_ws.resource_id = data.resource_id || ''
       }
     } else if (p === 'edge') Object.assign(ttsForm.edge, data)
     else if (p === 'edge_offline') Object.assign(ttsForm.edge_offline, data)
@@ -1249,6 +1254,10 @@ async function loadTtsVoiceOptions(provider) {
   } finally {
     voiceLoading.value = false
   }
+}
+
+function handleTtsVoiceOptionsRequest(provider) {
+  loadTtsVoiceOptions(provider || ttsForm.provider)
 }
 
 // 进入 TTS 步骤时加载当前 provider 的音色列表

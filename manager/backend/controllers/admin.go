@@ -156,53 +156,76 @@ func (ac *AdminController) GetDeviceConfigs(c *gin.Context) {
 		response.OpenClaw = buildOpenClawConfigFromAgent(agent)
 	}
 
-	cloneVoiceCache := make(map[string]bool)
-	hasAliyunQwenCloneVoice := func(ttsConfigID string, voice *string) bool {
+	cloneVoiceModelCache := make(map[string]string)
+	resolveCloneVoiceModelOverride := func(provider, ttsConfigID string, voice *string) *string {
 		if device.ID == 0 || device.UserID == 0 {
-			return false
+			return nil
 		}
+		provider = normalizeCloneProvider(provider)
 		if strings.TrimSpace(ttsConfigID) == "" || voice == nil || strings.TrimSpace(*voice) == "" {
-			return false
+			return nil
 		}
-		voiceID := strings.TrimSpace(*voice)
-		cacheKey := ttsConfigID + "||" + voiceID
-		if cached, exists := cloneVoiceCache[cacheKey]; exists {
-			return cached
+		if provider != "aliyun_qwen" && provider != "doubao" {
+			return nil
 		}
 
-		var count int64
-		err := ac.DB.Model(&models.VoiceClone{}).
-			Where("user_id = ? AND provider = ? AND tts_config_id = ? AND provider_voice_id = ? AND status = ?",
-				device.UserID, "aliyun_qwen", ttsConfigID, voiceID, voiceCloneStatusActive).
-			Count(&count).Error
-		if err != nil {
-			log.Printf("检测千问复刻音色失败: user_id=%d tts_config_id=%s voice_id=%s err=%v", device.UserID, ttsConfigID, voiceID, err)
-			cloneVoiceCache[cacheKey] = false
-			return false
+		voiceID := strings.TrimSpace(*voice)
+		cacheKey := provider + "||" + ttsConfigID + "||" + voiceID
+		if cached, exists := cloneVoiceModelCache[cacheKey]; exists {
+			if cached == "" {
+				return nil
+			}
+			model := cached
+			return &model
 		}
-		cloneVoiceCache[cacheKey] = count > 0
-		return cloneVoiceCache[cacheKey]
+
+		query := ac.DB.Model(&models.VoiceClone{}).
+			Where("user_id = ? AND tts_config_id = ? AND provider_voice_id = ? AND status = ?",
+				device.UserID, ttsConfigID, voiceID, voiceCloneStatusActive)
+		if provider == "doubao" {
+			query = query.Where("provider IN ?", []string{"doubao", "doubao_ws"})
+		} else {
+			query = query.Where("provider = ?", provider)
+		}
+
+		var clone models.VoiceClone
+		err := query.Order("updated_at DESC, created_at DESC").First(&clone).Error
+		if err != nil {
+			if !errors.Is(err, gorm.ErrRecordNotFound) {
+				log.Printf("检测复刻音色模型覆盖失败: provider=%s user_id=%d tts_config_id=%s voice_id=%s err=%v", provider, device.UserID, ttsConfigID, voiceID, err)
+			}
+			cloneVoiceModelCache[cacheKey] = ""
+			return nil
+		}
+
+		targetModel := strings.TrimSpace(getTargetModelFromCloneMeta(clone.MetaJSON))
+		if targetModel == "" {
+			switch provider {
+			case "aliyun_qwen":
+				targetModel = defaultAliyunQwenCloneTargetModel
+			case "doubao":
+				targetModel = resolveDoubaoModelSelection("", voiceID).ConfigModel
+			}
+		}
+		cloneVoiceModelCache[cacheKey] = targetModel
+		if targetModel == "" {
+			return nil
+		}
+		return &targetModel
 	}
-	applyAliyunQwenCloneModel := func(provider, ttsConfigID string, voice *string, ttsConfigData map[string]interface{}) {
+	applyCloneVoiceModel := func(provider, ttsConfigID string, voice *string, ttsConfigData map[string]interface{}) {
 		if ttsConfigData == nil {
 			return
 		}
-		if normalizeCloneProvider(provider) != "aliyun_qwen" {
-			return
-		}
-		if hasAliyunQwenCloneVoice(ttsConfigID, voice) {
-			ttsConfigData["model"] = defaultAliyunQwenCloneTargetModel
+		if override := resolveCloneVoiceModelOverride(provider, ttsConfigID, voice); override != nil && strings.TrimSpace(*override) != "" {
+			ttsConfigData["model"] = strings.TrimSpace(*override)
 		}
 	}
-	buildAliyunQwenVoiceModelOverride := func(ttsConfigID *string, voice *string) *string {
+	buildVoiceModelOverride := func(provider string, ttsConfigID *string, voice *string) *string {
 		if ttsConfigID == nil {
 			return nil
 		}
-		if hasAliyunQwenCloneVoice(strings.TrimSpace(*ttsConfigID), voice) {
-			model := defaultAliyunQwenCloneTargetModel
-			return &model
-		}
-		return nil
+		return resolveCloneVoiceModelOverride(provider, strings.TrimSpace(*ttsConfigID), voice)
 	}
 
 	// ==================== 配置获取逻辑（带优先级） ====================
@@ -251,7 +274,7 @@ func (ac *AdminController) GetDeviceConfigs(c *gin.Context) {
 					} else {
 						ttsConfigData["voice"] = *role.Voice
 					}
-					applyAliyunQwenCloneModel(response.TTS.Provider, response.TTS.ConfigID, role.Voice, ttsConfigData)
+					applyCloneVoiceModel(response.TTS.Provider, response.TTS.ConfigID, role.Voice, ttsConfigData)
 					if updatedJsonData, err := json.Marshal(ttsConfigData); err == nil {
 						response.TTS.JsonData = string(updatedJsonData)
 					}
@@ -299,7 +322,7 @@ func (ac *AdminController) GetDeviceConfigs(c *gin.Context) {
 				} else {
 					ttsConfigData["voice"] = *agent.Voice
 				}
-				applyAliyunQwenCloneModel(response.TTS.Provider, response.TTS.ConfigID, agent.Voice, ttsConfigData)
+				applyCloneVoiceModel(response.TTS.Provider, response.TTS.ConfigID, agent.Voice, ttsConfigData)
 				if updatedJsonData, err := json.Marshal(ttsConfigData); err == nil {
 					response.TTS.JsonData = string(updatedJsonData)
 				}
@@ -346,7 +369,7 @@ func (ac *AdminController) GetDeviceConfigs(c *gin.Context) {
 					} else {
 						ttsConfigData["voice"] = *defaultRole.Voice
 					}
-					applyAliyunQwenCloneModel(response.TTS.Provider, response.TTS.ConfigID, defaultRole.Voice, ttsConfigData)
+					applyCloneVoiceModel(response.TTS.Provider, response.TTS.ConfigID, defaultRole.Voice, ttsConfigData)
 					if updatedJsonData, err := json.Marshal(ttsConfigData); err == nil {
 						response.TTS.JsonData = string(updatedJsonData)
 					}
@@ -455,7 +478,7 @@ func (ac *AdminController) GetDeviceConfigs(c *gin.Context) {
 					Uuids:              uuids,
 					TTSConfigID:        speakerGroup.TTSConfigID,
 					Voice:              speakerGroup.Voice,
-					VoiceModelOverride: buildAliyunQwenVoiceModelOverride(speakerGroup.TTSConfigID, speakerGroup.Voice),
+					VoiceModelOverride: buildVoiceModelOverride(response.TTS.Provider, speakerGroup.TTSConfigID, speakerGroup.Voice),
 				}
 			}
 		}
